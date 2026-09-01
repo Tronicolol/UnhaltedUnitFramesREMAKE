@@ -1,0 +1,64 @@
+name: Build UUF aura cooldown scroll fix
+
+on:
+  push:
+    branches:
+      - ui-aura-cooldown-01
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ui-aura-cooldown-01
+
+      - name: Apply scroll layout fix
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('Core/Config/GUI.lua')
+          text = path.read_text(encoding='utf-8')
+
+          old = '''    if UUF.db.profile.General.CooldownText.Advanced then\n        local AuraDurationDB = GetUnitDB(unit).Auras.AuraDuration\n        local AuraDurationContainer = GUIWidgets.CreateInlineGroup(containerParent, "Cooldown Text Settings")\n        CreateCooldownTextStyleSettings(AuraDurationContainer, AuraDurationDB)\n    end\n'''
+
+          new = '''    if UUF.db.profile.General.CooldownText.Advanced then\n        local AuraDurationDB = GetUnitDB(unit).Auras.AuraDuration\n        local AuraDurationContainer = GUIWidgets.CreateInlineGroup(containerParent, "Cooldown Text Settings")\n        CreateCooldownTextStyleSettings(AuraDurationContainer, AuraDurationDB)\n        AuraDurationContainer:DoLayout()\n        RelayoutGUIParents(AuraDurationContainer)\n    end\n'''
+
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif new not in text:
+              raise SystemExit('Aura cooldown block anchor missing')
+
+          path.write_text(text, encoding='utf-8', newline='\n')
+
+      - name: Commit production fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- Core/Config/GUI.lua; then
+            echo "Scroll fix already applied."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add Core/Config/GUI.lua
+            git commit -m "Fix aura cooldown settings scroll layout"
+            git push origin HEAD:ui-aura-cooldown-01
+          fi
+
+      - name: Stage test ZIP
+        shell: bash
+        run: |
+          mkdir -p patch/Core/Config patch/Core
+          cp Core/Config/GUI.lua patch/Core/Config/GUI.lua
+          cp Core/Defaults.lua patch/Core/Defaults.lua
+          cp Core/Globals.lua patch/Core/Globals.lua
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UUF_ui-aura-cooldown-01_SCROLL-FIX
+          path: patch/
+          if-no-files-found: error
