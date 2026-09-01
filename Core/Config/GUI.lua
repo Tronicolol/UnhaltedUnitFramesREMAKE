@@ -3925,6 +3925,8 @@ local function CreateSpecificAuraSettings(containerParent, unit, auraDB)
         local AuraDurationDB = GetUnitDB(unit).Auras.AuraDuration
         local AuraDurationContainer = GUIWidgets.CreateInlineGroup(containerParent, "Cooldown Text Settings")
         CreateCooldownTextStyleSettings(AuraDurationContainer, AuraDurationDB)
+        AuraDurationContainer:DoLayout()
+        RelayoutGUIParents(AuraDurationContainer)
     end
 
     local CountContainer = GUIWidgets.CreateInlineGroup(containerParent, "Count Settings")
