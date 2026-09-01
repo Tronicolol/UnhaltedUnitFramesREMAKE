@@ -3401,6 +3401,65 @@ local function CreateTagsSettings(containerParent, unit)
     containerParent:DoLayout()
 end
 
+local function CreateCooldownTextStyleSettings(StyleContainerParent, CooldownTextStyleDB)
+    local HideTimerCheckbox = AG:Create("CheckBox")
+    HideTimerCheckbox:SetLabel("Hide Timer")
+    HideTimerCheckbox:SetValue(CooldownTextStyleDB.HideTimer == true)
+    HideTimerCheckbox:SetRelativeWidth(1)
+    HideTimerCheckbox:SetCallback("OnValueChanged", function(_, _, value) CooldownTextStyleDB.HideTimer = value UUF:UpdateAllUnitFrames() end)
+    StyleContainerParent:AddChild(HideTimerCheckbox)
+
+    local ScaleByIconSizeCheckbox = AG:Create("CheckBox")
+    ScaleByIconSizeCheckbox:SetLabel("Scale Cooldown Text By Icon Size")
+    ScaleByIconSizeCheckbox:SetValue(CooldownTextStyleDB.ScaleByIconSize)
+    ScaleByIconSizeCheckbox:SetRelativeWidth(1)
+    StyleContainerParent:AddChild(ScaleByIconSizeCheckbox)
+
+    local AnchorFromDropdown = AG:Create("Dropdown")
+    AnchorFromDropdown:SetList(AnchorPoints[1], AnchorPoints[2])
+    AnchorFromDropdown:SetLabel("Anchor From")
+    AnchorFromDropdown:SetValue(CooldownTextStyleDB.Layout[1])
+    AnchorFromDropdown:SetRelativeWidth(0.5)
+    AnchorFromDropdown:SetCallback("OnValueChanged", function(_, _, value) CooldownTextStyleDB.Layout[1] = value UUF:UpdateAllUnitFrames() end)
+    StyleContainerParent:AddChild(AnchorFromDropdown)
+
+    local AnchorToDropdown = AG:Create("Dropdown")
+    AnchorToDropdown:SetList(AnchorPoints[1], AnchorPoints[2])
+    AnchorToDropdown:SetLabel("Anchor To")
+    AnchorToDropdown:SetValue(CooldownTextStyleDB.Layout[2])
+    AnchorToDropdown:SetRelativeWidth(0.5)
+    AnchorToDropdown:SetCallback("OnValueChanged", function(_, _, value) CooldownTextStyleDB.Layout[2] = value UUF:UpdateAllUnitFrames() end)
+    StyleContainerParent:AddChild(AnchorToDropdown)
+
+    local XPosSlider = AG:Create("Slider")
+    XPosSlider:SetLabel("X Position")
+    XPosSlider:SetValue(CooldownTextStyleDB.Layout[3])
+    XPosSlider:SetSliderValues(-3000, 3000, 0.1)
+    XPosSlider:SetRelativeWidth(0.33)
+    XPosSlider:SetCallback("OnValueChanged", function(_, _, value) CooldownTextStyleDB.Layout[3] = value UUF:UpdateAllUnitFrames() end)
+    StyleContainerParent:AddChild(XPosSlider)
+
+    local YPosSlider = AG:Create("Slider")
+    YPosSlider:SetLabel("Y Position")
+    YPosSlider:SetValue(CooldownTextStyleDB.Layout[4])
+    YPosSlider:SetSliderValues(-3000, 3000, 0.1)
+    YPosSlider:SetRelativeWidth(0.33)
+    YPosSlider:SetCallback("OnValueChanged", function(_, _, value) CooldownTextStyleDB.Layout[4] = value UUF:UpdateAllUnitFrames() end)
+    StyleContainerParent:AddChild(YPosSlider)
+
+    local FontSizeSlider = AG:Create("Slider")
+    FontSizeSlider:SetLabel("Font Size")
+    FontSizeSlider:SetValue(CooldownTextStyleDB.FontSize)
+    FontSizeSlider:SetSliderValues(8, 64, 1)
+    FontSizeSlider:SetRelativeWidth(0.33)
+    FontSizeSlider:SetCallback("OnValueChanged", function(_, _, value) CooldownTextStyleDB.FontSize = value UUF:UpdateAllUnitFrames() end)
+    FontSizeSlider:SetDisabled(CooldownTextStyleDB.ScaleByIconSize)
+    StyleContainerParent:AddChild(FontSizeSlider)
+    ScaleByIconSizeCheckbox:SetCallback("OnValueChanged", function(_, _, value) CooldownTextStyleDB.ScaleByIconSize = value FontSizeSlider:SetDisabled(value) UUF:UpdateAllUnitFrames() end)
+end
+
+
+
 local function CreateSpecificAuraSettings(containerParent, unit, auraDB)
     local AuraDB = GetUnitDB(unit).Auras[auraDB]
     local isCustom = auraDB == "Custom"
@@ -4233,63 +4292,6 @@ local function CreateAuraSettings(containerParent, unit)
     containerParent:AddChild(AuraContainerTabGroup)
 
     RelayoutGUIParents(containerParent)
-end
-
-local function CreateCooldownTextStyleSettings(StyleContainerParent, CooldownTextStyleDB)
-    local HideTimerCheckbox = AG:Create("CheckBox")
-    HideTimerCheckbox:SetLabel("Hide Timer")
-    HideTimerCheckbox:SetValue(CooldownTextStyleDB.HideTimer == true)
-    HideTimerCheckbox:SetRelativeWidth(1)
-    HideTimerCheckbox:SetCallback("OnValueChanged", function(_, _, value) CooldownTextStyleDB.HideTimer = value UUF:UpdateAllUnitFrames() end)
-    StyleContainerParent:AddChild(HideTimerCheckbox)
-
-    local ScaleByIconSizeCheckbox = AG:Create("CheckBox")
-    ScaleByIconSizeCheckbox:SetLabel("Scale Cooldown Text By Icon Size")
-    ScaleByIconSizeCheckbox:SetValue(CooldownTextStyleDB.ScaleByIconSize)
-    ScaleByIconSizeCheckbox:SetRelativeWidth(1)
-    StyleContainerParent:AddChild(ScaleByIconSizeCheckbox)
-
-    local AnchorFromDropdown = AG:Create("Dropdown")
-    AnchorFromDropdown:SetList(AnchorPoints[1], AnchorPoints[2])
-    AnchorFromDropdown:SetLabel("Anchor From")
-    AnchorFromDropdown:SetValue(CooldownTextStyleDB.Layout[1])
-    AnchorFromDropdown:SetRelativeWidth(0.5)
-    AnchorFromDropdown:SetCallback("OnValueChanged", function(_, _, value) CooldownTextStyleDB.Layout[1] = value UUF:UpdateAllUnitFrames() end)
-    StyleContainerParent:AddChild(AnchorFromDropdown)
-
-    local AnchorToDropdown = AG:Create("Dropdown")
-    AnchorToDropdown:SetList(AnchorPoints[1], AnchorPoints[2])
-    AnchorToDropdown:SetLabel("Anchor To")
-    AnchorToDropdown:SetValue(CooldownTextStyleDB.Layout[2])
-    AnchorToDropdown:SetRelativeWidth(0.5)
-    AnchorToDropdown:SetCallback("OnValueChanged", function(_, _, value) CooldownTextStyleDB.Layout[2] = value UUF:UpdateAllUnitFrames() end)
-    StyleContainerParent:AddChild(AnchorToDropdown)
-
-    local XPosSlider = AG:Create("Slider")
-    XPosSlider:SetLabel("X Position")
-    XPosSlider:SetValue(CooldownTextStyleDB.Layout[3])
-    XPosSlider:SetSliderValues(-3000, 3000, 0.1)
-    XPosSlider:SetRelativeWidth(0.33)
-    XPosSlider:SetCallback("OnValueChanged", function(_, _, value) CooldownTextStyleDB.Layout[3] = value UUF:UpdateAllUnitFrames() end)
-    StyleContainerParent:AddChild(XPosSlider)
-
-    local YPosSlider = AG:Create("Slider")
-    YPosSlider:SetLabel("Y Position")
-    YPosSlider:SetValue(CooldownTextStyleDB.Layout[4])
-    YPosSlider:SetSliderValues(-3000, 3000, 0.1)
-    YPosSlider:SetRelativeWidth(0.33)
-    YPosSlider:SetCallback("OnValueChanged", function(_, _, value) CooldownTextStyleDB.Layout[4] = value UUF:UpdateAllUnitFrames() end)
-    StyleContainerParent:AddChild(YPosSlider)
-
-    local FontSizeSlider = AG:Create("Slider")
-    FontSizeSlider:SetLabel("Font Size")
-    FontSizeSlider:SetValue(CooldownTextStyleDB.FontSize)
-    FontSizeSlider:SetSliderValues(8, 64, 1)
-    FontSizeSlider:SetRelativeWidth(0.33)
-    FontSizeSlider:SetCallback("OnValueChanged", function(_, _, value) CooldownTextStyleDB.FontSize = value UUF:UpdateAllUnitFrames() end)
-    FontSizeSlider:SetDisabled(CooldownTextStyleDB.ScaleByIconSize)
-    StyleContainerParent:AddChild(FontSizeSlider)
-    ScaleByIconSizeCheckbox:SetCallback("OnValueChanged", function(_, _, value) CooldownTextStyleDB.ScaleByIconSize = value FontSizeSlider:SetDisabled(value) UUF:UpdateAllUnitFrames() end)
 end
 
 
