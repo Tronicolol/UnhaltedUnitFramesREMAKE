@@ -1347,16 +1347,35 @@ local function RetargetConfiguredManagedGroupAuras(unitFrame, unit, hardRebind)
 end
 
 local function GetManagedGroupOccupantSnapshot(unit)
-	local okExists, exists = pcall(UnitExists, unit)
+	-- partyplayer is a configuration token; Blizzard's live unit token is player.
+	local liveUnit = unit == "partyplayer" and "player" or unit
+
+	local okExists, exists = pcall(UnitExists, liveUnit)
 	if not okExists or UUF:IsSecretValue(exists) then exists = false end
 
 	local guid
 	if exists then
-		local okGUID, value = pcall(UnitGUID, unit)
+		local okGUID, value = pcall(UnitGUID, liveUnit)
 		if okGUID and not UUF:IsSecretValue(value) then guid = value end
 	end
 
-	return guid or false, IsManagedGroupAuraUnitObservable(unit)
+	return guid or false, IsManagedGroupAuraUnitObservable(liveUnit)
+end
+
+local function ManagedGroupAuraContainersNeedRepair(unitFrame, unit)
+	local UnitDB = UUF:GetUnitDB(unitFrame, unit)
+	local AurasDB = UnitDB and UnitDB.Auras
+	if not AurasDB then return false end
+
+	local BuffsDB = AurasDB.Buffs
+	local DebuffsDB = AurasDB.Debuffs
+	local CustomDB = AurasDB.Custom
+
+	if BuffsDB and BuffsDB.Enabled and not unitFrame.UUFManagedTargetBuffs then return true end
+	if DebuffsDB and DebuffsDB.Enabled and not unitFrame.UUFManagedTargetDebuffs then return true end
+	if CustomDB and CustomDB.Enabled and not unitFrame.UUFManagedPartyRaidCustomAuras then return true end
+
+	return false
 end
 
 function UUF:RetargetManagedGroupAurasForUnitChange(unitFrame, unit)
@@ -1398,15 +1417,20 @@ local function RefreshManagedGroupOccupant(unitFrame, unit)
 		return
 	end
 
-	local isPartyUnit = unit:match("^party%d+$") ~= nil
+	local isPartyUnit = unit == "partyplayer" or unit:match("^party%d+$") ~= nil
 	local isRaidUnit = unit:match("^raid%d+$") ~= nil
 	if not isPartyUnit and not isRaidUnit then return end
 
 	local occupantKey, observable = GetManagedGroupOccupantSnapshot(unit)
+	local needsRepair = observable and ManagedGroupAuraContainersNeedRepair(unitFrame, unit)
 
+	-- Identity/visibility can be unchanged while a managed container is missing
+	-- after an early/transient initialization failure. Do not let the steady-state
+	-- guard permanently suppress the retry in that case.
 	if unitFrame.UUFManagedAuraOccupantUnit == unit
 		and unitFrame.UUFManagedAuraOccupantGUID == occupantKey
-		and unitFrame.UUFManagedAuraObservable == observable then
+		and unitFrame.UUFManagedAuraObservable == observable
+		and not needsRepair then
 		return
 	end
 
@@ -1425,6 +1449,13 @@ local function RefreshManagedGroupOccupant(unitFrame, unit)
 	-- stale parse can continue in the background.
 	if not observable then
 		ParkManagedGroupAuraContainers(unitFrame)
+		return
+	end
+
+	-- Self-heal a missing managed container even when the occupant identity did
+	-- not change. If creation fails transiently, the 1 s sweep will retry again.
+	if needsRepair then
+		UUF:UpdateUnitAuras(unitFrame, unit)
 		return
 	end
 
@@ -1450,7 +1481,9 @@ local function RefreshManagedGroupRosterAuras()
 	for _, frame in ipairs(UUF.PARTY_FRAMES or {}) do
 		if frame and not frame.isTestFrame then
 			local unit = (frame.GetAttribute and frame:GetAttribute("unit")) or frame.unit
-			if type(unit) == "string" and unit:match("^party%d+$") then
+			if frame == UUF.PARTYPLAYER or unit == "player" then
+				RefreshManagedGroupOccupant(frame, "partyplayer")
+			elseif type(unit) == "string" and unit:match("^party%d+$") then
 				RefreshManagedGroupOccupant(frame, unit)
 			end
 		end
