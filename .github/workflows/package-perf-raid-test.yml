@@ -1,0 +1,22 @@
+name: Package perf raid test
+
+on:
+  push:
+    branches:
+      - perf-raid-steady-01
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build addon zip
+        run: |
+          mkdir -p package/UnhaltedUnitFrames
+          rsync -a --exclude='.git' --exclude='.github' ./ package/UnhaltedUnitFrames/
+          cd package
+          zip -r ../UUF_main-plus-real-raid-test.zip UnhaltedUnitFrames
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UUF-main-plus-real-raid-test
+          path: UUF_main-plus-real-raid-test.zip
