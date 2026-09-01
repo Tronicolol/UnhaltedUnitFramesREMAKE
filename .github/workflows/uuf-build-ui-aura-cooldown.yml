@@ -1,0 +1,160 @@
+name: Build UUF aura cooldown UI
+
+on:
+  push:
+    branches:
+      - ui-aura-cooldown-01
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ui-aura-cooldown-01
+
+      - name: Apply production patch
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          import textwrap
+
+          gui_path = Path('Core/Config/GUI.lua')
+          defaults_path = Path('Core/Defaults.lua')
+          globals_path = Path('Core/Globals.lua')
+
+          gui = gui_path.read_text(encoding='utf-8')
+          defaults = defaults_path.read_text(encoding='utf-8')
+          globals_lua = globals_path.read_text(encoding='utf-8')
+
+          # ---------- GUI: make the cooldown style builder reusable ----------
+          create_marker = 'local function CreateCooldownTextSettings(containerParent)'
+          create_pos = gui.find(create_marker)
+          if create_pos < 0:
+              raise SystemExit('CreateCooldownTextSettings anchor missing')
+
+          nested_marker = '    local function CreateCooldownTextStyleSettings(StyleContainerParent, CooldownTextStyleDB)'
+          helper_start = gui.find(nested_marker, create_pos)
+          advanced_marker = '    if CooldownTextDB.Advanced then'
+          advanced_start = gui.find(advanced_marker, helper_start)
+          if helper_start < 0 or advanced_start < 0:
+              raise SystemExit('Cooldown style helper anchors missing')
+
+          helper_block = textwrap.dedent(gui[helper_start:advanced_start])
+          helper_block = helper_block.replace(
+              'local function CreateCooldownTextStyleSettings(StyleContainerParent, CooldownTextStyleDB)',
+              'local function CreateCooldownTextStyleSettings(StyleContainerParent, CooldownTextStyleDB)'
+          )
+          helper_block = helper_block.replace(
+              'ScaleByIconSizeCheckbox:SetRelativeWidth(CooldownTextDB.Advanced and 1 or 0.5)',
+              'ScaleByIconSizeCheckbox:SetRelativeWidth(1)'
+          )
+
+          function_line = 'local function CreateCooldownTextStyleSettings(StyleContainerParent, CooldownTextStyleDB)\n'
+          if function_line not in helper_block:
+              raise SystemExit('Extracted helper function line missing')
+
+          hide_timer_ui = '''    local HideTimerCheckbox = AG:Create("CheckBox")\n    HideTimerCheckbox:SetLabel("Hide Timer")\n    HideTimerCheckbox:SetValue(CooldownTextStyleDB.HideTimer == true)\n    HideTimerCheckbox:SetRelativeWidth(1)\n    HideTimerCheckbox:SetCallback("OnValueChanged", function(_, _, value) CooldownTextStyleDB.HideTimer = value UUF:UpdateAllUnitFrames() end)\n    StyleContainerParent:AddChild(HideTimerCheckbox)\n\n'''
+          helper_block = helper_block.replace(function_line, function_line + hide_timer_ui, 1)
+
+          # Remove nested helper, then insert reusable helper before the global page builder.
+          gui = gui[:helper_start] + gui[advanced_start:]
+          create_pos = gui.find(create_marker)
+          gui = gui[:create_pos] + helper_block + '\n' + gui[create_pos:]
+
+          # ---------- GUI: Advanced global page keeps only the Global tab ----------
+          create_pos = gui.find(create_marker)
+          advanced_start = gui.find(advanced_marker, create_pos)
+          breakpoints_marker = '    local Breakpoints = CooldownTextDB.CooldownBreakpoints'
+          breakpoints_pos = gui.find(breakpoints_marker, advanced_start)
+          if advanced_start < 0 or breakpoints_pos < 0:
+              raise SystemExit('Advanced cooldown block anchors missing')
+
+          global_only_block = '''    if CooldownTextDB.Advanced then\n        local function SelectCooldownTextTab(CooldownTextTabContainer)\n            CooldownTextTabContainer:ReleaseChildren()\n            CreateCooldownTextStyleSettings(CooldownTextTabContainer, CooldownTextDB)\n            containerParent:DoLayout()\n        end\n\n        local CooldownTextTabs = AG:Create("TabGroup")\n        CooldownTextTabs:SetLayout("Flow")\n        CooldownTextTabs:SetFullWidth(true)\n        CooldownTextTabs:SetTabs({\n            {text = "Global", value = "Global"},\n        })\n        CooldownTextTabs:SetCallback("OnGroupSelected", SelectCooldownTextTab)\n        CooldownTextTabs:SelectTab("Global")\n        CooldownTextContainer:AddChild(CooldownTextTabs)\n    else\n        CreateCooldownTextStyleSettings(CooldownTextContainer, CooldownTextDB)\n    end\n\n'''
+          gui = gui[:advanced_start] + global_only_block + gui[breakpoints_pos:]
+
+          # ---------- GUI: per-unit AuraDuration controls live above Count Settings ----------
+          count_marker = '    local CountContainer = GUIWidgets.CreateInlineGroup(containerParent, "Count Settings")'
+          if gui.count(count_marker) != 1:
+              raise SystemExit(f'Expected one Count Settings anchor, found {gui.count(count_marker)}')
+
+          per_unit_block = '''    if UUF.db.profile.General.CooldownText.Advanced then\n        local AuraDurationDB = GetUnitDB(unit).Auras.AuraDuration\n        local AuraDurationContainer = GUIWidgets.CreateInlineGroup(containerParent, "Cooldown Text Settings")\n        CreateCooldownTextStyleSettings(AuraDurationContainer, AuraDurationDB)\n    end\n\n'''
+          gui = gui.replace(count_marker, per_unit_block + count_marker, 1)
+
+          # ---------- Defaults: HideTimer is false globally and per-unit ----------
+          global_cd_anchor = '''            CooldownText = {\n                Advanced = false,\n'''
+          if global_cd_anchor not in defaults:
+              raise SystemExit('Global CooldownText default anchor missing')
+          defaults = defaults.replace(
+              global_cd_anchor,
+              '''            CooldownText = {\n                Advanced = false,\n                HideTimer = false,\n''',
+              1,
+          )
+
+          aura_duration_pattern = re.compile(r'(AuraDuration\s*=\s*\{\n)([ \t]+)(?!HideTimer\s*=)')
+          defaults, aura_duration_count = aura_duration_pattern.subn(
+              lambda m: m.group(1) + m.group(2) + 'HideTimer = false,\n' + m.group(2),
+              defaults,
+          )
+          if aura_duration_count < 1:
+              raise SystemExit('No AuraDuration defaults updated')
+
+          # ---------- Runtime: hide only the duration FontString, never the swipe ----------
+          apply_anchor = 'function UUF:ApplyCooldownText(icon, textRegion, unit, unitFrame, skipCountdownFormatter)'
+          apply_pos = globals_lua.find(apply_anchor)
+          if apply_pos < 0:
+              raise SystemExit('ApplyCooldownText anchor missing')
+
+          fonts_marker = '    local FontsDB = UUF.db.profile.General.Fonts'
+          fonts_pos = globals_lua.find(fonts_marker, apply_pos)
+          if fonts_pos < 0:
+              raise SystemExit('ApplyCooldownText FontsDB anchor missing')
+
+          hide_runtime = '''    if CooldownTextDB.HideTimer == true then\n        textRegion:Hide()\n        return\n    end\n    textRegion:Show()\n\n'''
+          globals_lua = globals_lua[:fonts_pos] + hide_runtime + globals_lua[fonts_pos:]
+
+          # Structural validation.
+          if 'value = "Auras"' in gui[gui.find(create_marker):gui.find(breakpoints_marker, gui.find(create_marker))]:
+              raise SystemExit('Old Auras tab still present in Cooldown Text page')
+          if 'HideTimerCheckbox:SetLabel("Hide Timer")' not in gui:
+              raise SystemExit('Hide Timer GUI missing')
+          if 'CooldownTextStyleDB.HideTimer == true' not in gui:
+              raise SystemExit('Hide Timer DB binding missing')
+          if 'if CooldownTextDB.HideTimer == true then' not in globals_lua:
+              raise SystemExit('Hide Timer runtime missing')
+
+          gui_path.write_text(gui, encoding='utf-8', newline='\n')
+          defaults_path.write_text(defaults, encoding='utf-8', newline='\n')
+          globals_path.write_text(globals_lua, encoding='utf-8', newline='\n')
+
+      - name: Commit production changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- Core/Config/GUI.lua Core/Defaults.lua Core/Globals.lua; then
+            echo "Production patch already applied."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add Core/Config/GUI.lua Core/Defaults.lua Core/Globals.lua
+            git commit -m "Move aura cooldown text settings into unit panels"
+            git push origin HEAD:ui-aura-cooldown-01
+          fi
+
+      - name: Stage test ZIP
+        shell: bash
+        run: |
+          mkdir -p patch/Core/Config patch/Core
+          cp Core/Config/GUI.lua patch/Core/Config/GUI.lua
+          cp Core/Defaults.lua patch/Core/Defaults.lua
+          cp Core/Globals.lua patch/Core/Globals.lua
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UUF_ui-aura-cooldown-01_TEST
+          path: patch/
+          if-no-files-found: error
