@@ -1300,26 +1300,94 @@ function UUF:RefreshMidnightManagedAuras(unitFrame, unit, forceRescan)
 	RefreshManagedAuraContainer(unitFrame.UUFManagedPartyRaidCustomAuras, forceRescan)
 end
 
--- AuraContainer keeps the unit TOKEN, not the occupant identity. In Party/Raid a
--- roster change can replace the player behind the same token (for example party2)
--- without SetUnit seeing a different string. If the new member is not locally
--- observable yet, the container can otherwise keep buttons parsed for the previous
--- occupant until a later UNIT_AURA arrives. Force a real null -> unit rebind only
--- when the occupant GUID changes. Blizzard's AuraContainer null token is "none".
+-- Party/Raid AuraContainers keep their configured groups/layouts across roster
+-- changes. Reassignment only needs to move the live unit binding; rebuilding all
+-- aura configuration here is substantially more expensive and duplicates work.
 local MANAGED_AURA_NO_UNIT = "none"
 
-local function HardRebindManagedAuraContainer(container, unit)
+local function RetargetManagedGroupAuraContainer(container, unitFrame, unit, hardRebind)
 	if not container or not container.SetUnit then return end
 
-	-- Clear the previous occupant first. UpdateAllAuras on the null binding makes
-	-- stale buttons disappear even when the replacement unit cannot provide aura
-	-- data yet (common immediately after a distant member joins).
-	pcall(container.SetUnit, container, MANAGED_AURA_NO_UNIT)
-	if container.UpdateAllAuras then pcall(container.UpdateAllAuras, container) end
+	if hardRebind then
+		pcall(container.SetUnit, container, MANAGED_AURA_NO_UNIT)
+	end
 
-	if unit and UnitExists(unit) then
-		pcall(container.SetUnit, container, unit)
-		if container.UpdateAllAuras then pcall(container.UpdateAllAuras, container) end
+	pcall(container.SetUnit, container, GetManagedAuraUnitToken(unitFrame, unit))
+	if container.UpdateAllAuras then
+		pcall(container.UpdateAllAuras, container)
+	end
+end
+
+local function RetargetConfiguredManagedGroupAuras(unitFrame, unit, hardRebind)
+	local UnitDB = UUF:GetUnitDB(unitFrame, unit)
+	local AurasDB = UnitDB and UnitDB.Auras
+	if not AurasDB then return false end
+
+	local BuffsDB = AurasDB.Buffs
+	local DebuffsDB = AurasDB.Debuffs
+	local CustomDB = AurasDB.Custom
+
+	-- If an enabled aura type has not been created/configured yet, fall back to
+	-- the full updater instead of trying to infer missing state.
+	if BuffsDB and BuffsDB.Enabled and not unitFrame.UUFManagedTargetBuffs then return false end
+	if DebuffsDB and DebuffsDB.Enabled and not unitFrame.UUFManagedTargetDebuffs then return false end
+	if CustomDB and CustomDB.Enabled and not unitFrame.UUFManagedPartyRaidCustomAuras then return false end
+
+	if BuffsDB and BuffsDB.Enabled then
+		RetargetManagedGroupAuraContainer(unitFrame.UUFManagedTargetBuffs, unitFrame, unit, hardRebind)
+	end
+	if DebuffsDB and DebuffsDB.Enabled then
+		RetargetManagedGroupAuraContainer(unitFrame.UUFManagedTargetDebuffs, unitFrame, unit, hardRebind)
+	end
+	if CustomDB and CustomDB.Enabled then
+		RetargetManagedGroupAuraContainer(unitFrame.UUFManagedPartyRaidCustomAuras, unitFrame, unit, hardRebind)
+	end
+
+	return true
+end
+
+local function GetManagedGroupOccupantSnapshot(unit)
+	local okExists, exists = pcall(UnitExists, unit)
+	if not okExists or UUF:IsSecretValue(exists) then exists = false end
+
+	local guid
+	if exists then
+		local okGUID, value = pcall(UnitGUID, unit)
+		if okGUID and not UUF:IsSecretValue(value) then guid = value end
+	end
+
+	return guid or false, IsManagedGroupAuraUnitObservable(unit)
+end
+
+function UUF:RetargetManagedGroupAurasForUnitChange(unitFrame, unit)
+	if not unitFrame or type(unit) ~= "string" then return end
+
+	if IsGroupAuraPreviewActive(unitFrame, unit) then
+		SuspendRealAurasForGroupPreview(unitFrame)
+		return
+	end
+
+	local isPartyUnit = unit:match("^party%d+$") ~= nil
+	local isRaidUnit = unit:match("^raid%d+$") ~= nil
+	if not isPartyUnit and not isRaidUnit then
+		UUF:UpdateUnitAuras(unitFrame, unit)
+		return
+	end
+
+	local occupantKey, observable = GetManagedGroupOccupantSnapshot(unit)
+	unitFrame.UUFManagedAuraOccupantUnit = unit
+	unitFrame.UUFManagedAuraOccupantGUID = occupantKey
+	unitFrame.UUFManagedAuraObservable = observable
+
+	if not observable then
+		ParkManagedGroupAuraContainers(unitFrame)
+		return
+	end
+
+	-- Secure-header token reassignment changes the occupant/binding, not the
+	-- configured aura layout/filter/group definitions.
+	if not RetargetConfiguredManagedGroupAuras(unitFrame, unit, false) then
+		UUF:UpdateUnitAuras(unitFrame, unit)
 	end
 end
 
@@ -1334,15 +1402,7 @@ local function RefreshManagedGroupOccupant(unitFrame, unit)
 	local isRaidUnit = unit:match("^raid%d+$") ~= nil
 	if not isPartyUnit and not isRaidUnit then return end
 
-	local okExists, exists = pcall(UnitExists, unit)
-	if not okExists or UUF:IsSecretValue(exists) then exists = false end
-	local guid
-	if exists then
-		local okGUID, value = pcall(UnitGUID, unit)
-		if okGUID and not UUF:IsSecretValue(value) then guid = value end
-	end
-	local occupantKey = guid or false
-	local observable = IsManagedGroupAuraUnitObservable(unit)
+	local occupantKey, observable = GetManagedGroupOccupantSnapshot(unit)
 
 	if unitFrame.UUFManagedAuraOccupantUnit == unit
 		and unitFrame.UUFManagedAuraOccupantGUID == occupantKey
@@ -1350,8 +1410,10 @@ local function RefreshManagedGroupOccupant(unitFrame, unit)
 		return
 	end
 
-	local occupantChanged = unitFrame.UUFManagedAuraOccupantUnit ~= unit
-		or unitFrame.UUFManagedAuraOccupantGUID ~= occupantKey
+	local previousUnit = unitFrame.UUFManagedAuraOccupantUnit
+	local previousGUID = unitFrame.UUFManagedAuraOccupantGUID
+	local occupantChanged = previousUnit ~= unit or previousGUID ~= occupantKey
+	local tokenChanged = previousUnit ~= unit
 	local becameObservable = unitFrame.UUFManagedAuraObservable == false and observable
 
 	unitFrame.UUFManagedAuraOccupantUnit = unit
@@ -1366,17 +1428,21 @@ local function RefreshManagedGroupOccupant(unitFrame, unit)
 		return
 	end
 
-	-- Re-apply current settings first. This also re-enables only the aura types
-	-- that are actually configured. On a visibility regain this is the one full
-	-- reparse needed to replace any state from before the ghosted interval.
-	UUF:UpdateUnitAuras(unitFrame, unit)
+	-- Returning from an unobservable/parked state must restore configured enabled
+	-- state, so retain the full updater for this distinct lifecycle edge.
+	if becameObservable then
+		UUF:UpdateUnitAuras(unitFrame, unit)
+		return
+	end
 
-	-- A roster occupant change behind the same partyX/raidX token needs a true
-	-- null -> unit rebind. A simple visibility regain was already reparsed above.
-	if occupantChanged and not becameObservable then
-		HardRebindManagedAuraContainer(unitFrame.UUFManagedTargetBuffs, unit)
-		HardRebindManagedAuraContainer(unitFrame.UUFManagedTargetDebuffs, unit)
-		HardRebindManagedAuraContainer(unitFrame.UUFManagedPartyRaidCustomAuras, unit)
+	if occupantChanged then
+		-- Different secure token: move the binding and refresh once. Same token but
+		-- different GUID: force none -> token first, then refresh once to discard
+		-- any state belonging to the previous occupant.
+		local hardRebind = not tokenChanged
+		if not RetargetConfiguredManagedGroupAuras(unitFrame, unit, hardRebind) then
+			UUF:UpdateUnitAuras(unitFrame, unit)
+		end
 	end
 end
 
@@ -1404,6 +1470,29 @@ end
 -- visibility. Sweep only the small Party/Raid frame set once per second; the
 -- per-frame state guard above makes the steady-state pass read-only.
 local managedGroupAuraVisibilityTicker = C_Timer.NewTicker(1.0, RefreshManagedGroupRosterAuras)
+
+local managedGroupRosterImmediatePending = false
+local managedGroupRosterSettleTimer
+
+local function QueueManagedGroupRosterAuraRefresh()
+	if not managedGroupRosterImmediatePending then
+		managedGroupRosterImmediatePending = true
+
+		C_Timer.After(0, function()
+			managedGroupRosterImmediatePending = false
+			RefreshManagedGroupRosterAuras()
+		end)
+	end
+
+	if managedGroupRosterSettleTimer then
+		managedGroupRosterSettleTimer:Cancel()
+	end
+
+	managedGroupRosterSettleTimer = C_Timer.NewTimer(0.25, function()
+		managedGroupRosterSettleTimer = nil
+		RefreshManagedGroupRosterAuras()
+	end)
+end
 
 local managedAuraRetargetFrame = CreateFrame("Frame")
 managedAuraRetargetFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -1433,10 +1522,9 @@ managedAuraRetargetFrame:SetScript("OnEvent", function(_, event, unitToken)
 	end
 
 	if event == "GROUP_ROSTER_UPDATE" then
-		-- Secure headers and party tokens may settle over more than one frame. The
-		-- GUID guard makes the second pass free unless an occupant really changed.
-		C_Timer.After(0, RefreshManagedGroupRosterAuras)
-		C_Timer.After(0.25, RefreshManagedGroupRosterAuras)
+		-- Coalesce roster-update storms: run at most one immediate sweep and keep
+		-- only one settling pass after the last event in the burst.
+		QueueManagedGroupRosterAuraRefresh()
 		return
 	end
 

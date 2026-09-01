@@ -93,9 +93,14 @@ function UUF:CreateUnitFrame(unitFrame, unit)
 			end
 			if frame.Health then frame.Health:ForceUpdate() end
 			if frame.Tags then for configuredTag in pairs(RaidDB.Tags) do UUF:UpdateUnitTag(frame, value, configuredTag) end elseif frame.UpdateTags then frame:UpdateTags() end
-			-- Managed AuraContainers keep their own unit token. Refresh them whenever
-			-- a secure raid-header child is reassigned to a different raid unit.
-			UUF:UpdateUnitAuras(frame, value)
+			-- Secure raid-header reassignment changes the live unit token, not the
+			-- configured aura groups/layout. Retarget existing managed containers
+			-- instead of rebuilding the full aura configuration.
+			if UUF.RetargetManagedGroupAurasForUnitChange then
+				UUF:RetargetManagedGroupAurasForUnitChange(frame, value)
+			else
+				UUF:UpdateUnitAuras(frame, value)
+			end
 			UUF:UpdateUnitPowerBar(frame, value)
 			UUF:UpdateUnitRoleIndicator(frame, value)
 		end)
