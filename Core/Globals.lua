@@ -261,6 +261,12 @@ function UUF:ApplyCooldownText(icon, textRegion, unit, unitFrame, skipCountdownF
         return
     end
 
+    if CooldownTextDB.HideTimer == true then
+        textRegion:Hide()
+        return
+    end
+    textRegion:Show()
+
     local FontsDB = UUF.db.profile.General.Fonts
     if CooldownTextDB.ScaleByIconSize then
         local iconWidth = icon:GetWidth()
