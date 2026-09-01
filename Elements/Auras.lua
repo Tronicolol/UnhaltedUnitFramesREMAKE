@@ -1586,6 +1586,18 @@ local function RegisterManagedAuraButton(unitFrame, storageKey, button)
 	buttons[button] = true
 end
 
+local function GetManagedCooldownTextStyleDB(unitFrame, unit)
+	local globalCooldownDB = UUF.db.profile.General.CooldownText
+	if globalCooldownDB.Advanced and unit then
+		local unitDB = UUF:GetUnitDB(unitFrame, unit)
+		if unitDB and unitDB.Auras and unitDB.Auras.AuraDuration then
+			return unitDB.Auras.AuraDuration
+		end
+	end
+
+	return globalCooldownDB
+end
+
 local function CreateManagedAuraDurationText(button, cooldown, unitFrame, unit)
 	-- AuraContainer 12.1: el swipe y el texto de duración son bindings distintos.
 	-- Ocultamos únicamente el contador interno del CooldownFrame y registramos
@@ -1596,6 +1608,16 @@ local function CreateManagedAuraDurationText(button, cooldown, unitFrame, unit)
 
 	local durationText = cooldown:CreateFontString(nil, "OVERLAY")
 	button.UUFDurationText = durationText
+
+	-- Keep the swipe binding through SetDurationCooldown, but when Hide Timer is
+	-- enabled do not hand a duration FontString to AuraButton at all. Blizzard
+	-- owns SetDurationText visibility and may re-show a FontString that an addon
+	-- merely hid after binding it. No duration binding means swipe-only reliably.
+	local cooldownTextStyleDB = GetManagedCooldownTextStyleDB(unitFrame, unit)
+	if cooldownTextStyleDB and cooldownTextStyleDB.HideTimer == true then
+		durationText:Hide()
+		return
+	end
 
 	RefreshManagedAuraDurationFormatter()
 	UUF:ApplyCooldownText(cooldown, durationText, unit, unitFrame, true)
@@ -1719,14 +1741,7 @@ end
 
 local function ManagedCooldownTextSignature(unitFrame, unit)
 	local globalCooldownDB = UUF.db.profile.General.CooldownText
-	local styleDB = globalCooldownDB
-
-	if globalCooldownDB.Advanced and unit then
-		local unitDB = UUF:GetUnitDB(unitFrame, unit)
-		if unitDB and unitDB.Auras and unitDB.Auras.AuraDuration then
-			styleDB = unitDB.Auras.AuraDuration
-		end
-	end
+	local styleDB = GetManagedCooldownTextStyleDB(unitFrame, unit)
 
 	local fontsDB = UUF.db.profile.General.Fonts
 	local shadow = fontsDB.Shadow or {}
@@ -1734,6 +1749,7 @@ local function ManagedCooldownTextSignature(unitFrame, unit)
 
 	local parts = {
 		tostring(globalCooldownDB.Advanced),
+		tostring(styleDB.HideTimer == true),
 		tostring(styleDB.FontSize),
 		tostring(styleDB.ScaleByIconSize),
 		tostring(layout[1]),
