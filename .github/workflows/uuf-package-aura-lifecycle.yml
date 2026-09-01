@@ -1,0 +1,18 @@
+name: Package managed aura lifecycle fix
+
+on:
+  push:
+    branches:
+      - fix-managed-aura-lifecycle-01
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix-managed-aura-lifecycle-01
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UUF_fix-managed-aura-lifecycle-01_TEST
+          path: Elements/Auras.lua
