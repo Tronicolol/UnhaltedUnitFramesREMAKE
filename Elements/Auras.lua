@@ -3248,7 +3248,7 @@ function UUF:CreateTestAuras(unitFrame, unit)
                     if BuffsDB.Count.HideStacks then button.Count:Hide() else button.Count:Show() end
                     button.Duration = button.Duration or button:CreateFontString(nil, "OVERLAY")
 					UUF:ApplyCooldownText(button, button.Duration, unit, unitFrame)
-                    button.Duration:SetText("10m")
+                    if button.Duration:GetFont() then button.Duration:SetText("10m") end
                     button:Show()
                 end
 
@@ -3318,7 +3318,7 @@ function UUF:CreateTestAuras(unitFrame, unit)
                     if DebuffsDB.Count.HideStacks then button.Count:Hide() else button.Count:Show() end
                     button.Duration = button.Duration or button:CreateFontString(nil, "OVERLAY")
 						UUF:ApplyCooldownText(button, button.Duration, unit, unitFrame)
-                    button.Duration:SetText("10m")
+                    if button.Duration:GetFont() then button.Duration:SetText("10m") end
                     button:Show()
                 end
 
@@ -3388,7 +3388,7 @@ function UUF:CreateTestAuras(unitFrame, unit)
                     if CustomDB.Count.HideStacks then button.Count:Hide() else button.Count:Show() end
                     button.Duration = button.Duration or button:CreateFontString(nil, "OVERLAY")
 						UUF:ApplyCooldownText(button, button.Duration, unit, unitFrame)
-                    button.Duration:SetText("10m")
+                    if button.Duration:GetFont() then button.Duration:SetText("10m") end
                     button:Show()
                 end
 
