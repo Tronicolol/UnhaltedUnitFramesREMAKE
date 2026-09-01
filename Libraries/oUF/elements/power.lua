@@ -431,11 +431,17 @@ local function Path(self, ...)
 	* unit  - the unit accompanying the event (string)
 	* ...   - the arguments accompanying the event
 	--]]
+	local event = ...
 	do
 		(self.Power.Override or Update) (self, ...)
 	end
 
-	ColorPath(self, ...)
+	-- Party/Raid power type, colour and connectivity are refreshed by their
+	-- dedicated lifecycle events. UNIT_POWER_UPDATE only changes the value, so
+	-- UUF can opt out of the comparatively expensive generic ColorPath here.
+	if(not (event == 'UNIT_POWER_UPDATE' and self.Power.UUFSkipColorOnPowerUpdate)) then
+		ColorPath(self, ...)
+	end
 end
 
 local function PredictionPath(self, ...)
