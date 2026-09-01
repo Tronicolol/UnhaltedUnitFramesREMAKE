@@ -1,0 +1,10 @@
+## Interface: 120005, 120007
+## Title: oUF
+## Author: Haste, lightspark, p3lim, Rainrider
+## Version: aabc3a8
+## Notes: Unit frame framework. Does nothing by itself.
+## OptionalDeps: Clique
+## X-oUF: oUF
+
+
+oUF.xml
