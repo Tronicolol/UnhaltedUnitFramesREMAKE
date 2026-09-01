@@ -394,7 +394,7 @@ local function shouldUpdatePredictionSize(self)
 	end
 end
 
-local function Path(self, ...)
+local function Path(self, event, unit, ...)
 	--[[ Override: Health.UpdatePredictionSize(self, event, unit, ...)
 	Used to completely override the internal function for updating the healing prediction sub-widgets' size.
 
@@ -404,7 +404,7 @@ local function Path(self, ...)
 	* ...   - the arguments accompanying the event
 	--]]
 	if(shouldUpdatePredictionSize(self)) then
-		(self.Health.UpdatePredictionSize or UpdatePredictionSize) (self, ...)
+		(self.Health.UpdatePredictionSize or UpdatePredictionSize) (self, event, unit, ...)
 	end
 
 	--[[ Override: Health.Override(self, event, unit)
@@ -415,10 +415,14 @@ local function Path(self, ...)
 	* unit  - the unit accompanying the event (string)
 	--]]
 	do
-		(self.Health.Override or Update) (self, ...)
+		(self.Health.Override or Update) (self, event, unit, ...)
 	end
 
-	ColorPath(self, ...)
+	-- Party/Raid health fill changes do not change class/reaction/static health colours.
+	-- Their dedicated events still run ColorPath; skip only the hot UNIT_HEALTH path.
+	if(not (event == 'UNIT_HEALTH' and self.Health.UUFSkipColorOnHealthUpdate)) then
+		ColorPath(self, event, unit, ...)
+	end
 end
 
 local function ForceUpdate(element)

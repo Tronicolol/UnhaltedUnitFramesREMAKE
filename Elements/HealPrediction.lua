@@ -558,11 +558,16 @@ local function GroupLeanHealthOverride(owner, event, unit)
     end
 end
 
-local function InstallGroupLeanHealth(unitFrame)
+local function InstallGroupLeanHealth(unitFrame, unit)
     local health = unitFrame and unitFrame.Health
     if not health then return end
     unitFrame.UUFGroupLeanHealth = true
     health.Override = GroupLeanHealthOverride
+
+    -- Only Party/Raid opt into skipping generic Health ColorPath on UNIT_HEALTH.
+    -- Player/Target/Boss and other frames retain the stock oUF colour lifecycle.
+    local normalizedUnit = UUF:GetNormalizedUnit(unit)
+    health.UUFSkipColorOnHealthUpdate = normalizedUnit == 'party' or normalizedUnit == 'raid'
     health.UUFGroupForcePredictionUpdate = function()
         UpdateGroupPredictionValues(unitFrame, unitFrame.unit)
     end
@@ -642,7 +647,7 @@ local function ApplyGroupUnifiedPrediction(unitFrame, unit, isInitialCreate)
         health.HealAbsorb = nil
     end
 
-    InstallGroupLeanHealth(unitFrame)
+    InstallGroupLeanHealth(unitFrame, unit)
 
     if not isInitialCreate then
         local registrationChanged = hadIncoming ~= (health.HealingPlayer ~= nil)
