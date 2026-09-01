@@ -1,5 +1,26 @@
 local _, UUF = ...
 
+local POWER_SMOOTH_INTERPOLATION = Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.ExponentialEaseOut
+local POWER_IMMEDIATE_INTERPOLATION = Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.Immediate
+
+local function ApplyPowerUpdateMode(element, smooth)
+    if not element then return end
+
+    -- Midnight 12.0+ provides native StatusBar interpolation. Smooth is a visual
+    -- option; it must not opt the element into the higher-rate UNIT_POWER_FREQUENT
+    -- stream. Keep normal UNIT_POWER_UPDATE cadence and let the StatusBar animate.
+    element.smoothing = smooth and POWER_SMOOTH_INTERPOLATION or POWER_IMMEDIATE_INTERPOLATION
+
+    if element.SetFrequentUpdates then
+        -- When the element is already enabled this also repairs registrations
+        -- created by an older configuration/runtime state.
+        element:SetFrequentUpdates(false)
+    else
+        -- During initial style construction oUF has not attached the method yet.
+        element.frequentUpdates = false
+    end
+end
+
 local function ShouldShowUnitPowerBar(unitFrame, unit, PowerBarDB)
 	if not PowerBarDB.Enabled then return false end
 	if not PowerBarDB.OnlyShowHealers then return true end
@@ -108,7 +129,7 @@ function UUF:CreateUnitPowerBar(unitFrame, unit)
     PowerBar:SetFrameLevel(unitContainer:GetFrameLevel() + 2)
     PowerBar.colorPower = PowerBarDB.ColourByType
     PowerBar.colorClass = PowerBarDB.ColourByClass
-    PowerBar.frequentUpdates = PowerBarDB.Smooth
+    ApplyPowerUpdateMode(PowerBar, PowerBarDB.Smooth)
     PowerBar.PostUpdateColor = CreatePowerBarPostUpdateColor(unitFrame, unit)
 	unitFrame.PowerBar = PowerBar
 
@@ -174,7 +195,7 @@ function UUF:UpdateUnitPowerBar(unitFrame, unit)
             unitFrame.Power:SetStatusBarTexture(UUF.Media.Foreground)
             unitFrame.Power.colorPower = PowerBarDB.ColourByType
             unitFrame.Power.colorClass = PowerBarDB.ColourByClass
-            unitFrame.Power.frequentUpdates = PowerBarDB.Smooth
+            ApplyPowerUpdateMode(unitFrame.Power, PowerBarDB.Smooth)
             if PowerBarDB.Inverse then
                 unitFrame.Power:SetReverseFill(true)
             else
