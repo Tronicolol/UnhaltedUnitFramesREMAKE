@@ -60,6 +60,7 @@ local function UpdateButton(button, treeline, selected, canExpand, isExpanded)
 	local value = treeline.value
 	local uniquevalue = treeline.uniquevalue
 	local disabled = treeline.disabled
+	local noToggle = treeline.noToggle
 
 	button.treeline = treeline
 	button.value = value
@@ -103,7 +104,7 @@ local function UpdateButton(button, treeline, selected, canExpand, isExpanded)
 		button.icon:SetTexCoord(0, 1, 0, 1)
 	end
 
-	if canExpand then
+	if canExpand and not noToggle then
 		if not isExpanded then
 			toggle:SetNormalTexture(130838) -- Interface\\Buttons\\UI-PlusButton-UP
 			toggle:SetPushedTexture(130836) -- Interface\\Buttons\\UI-PlusButton-DOWN
@@ -141,6 +142,7 @@ local function addLine(self, v, tree, level, parent)
 	line.level = level
 	line.parent = parent
 	line.visible = v.visible
+	line.noToggle = v.noToggle
 	line.uniquevalue = GetButtonUniqueValue(line)
 	if v.children then
 		line.hasChildren = true
@@ -172,6 +174,7 @@ Scripts
 -------------------------------------------------------------------------------]]
 local function Expand_OnClick(frame)
 	local button = frame.button
+	if button.treeline and button.treeline.noToggle then return end
 	local self = button.obj
 	local status = (self.status or self.localstatus).groups
 	status[button.uniquevalue] = not status[button.uniquevalue]
@@ -191,6 +194,7 @@ local function Button_OnClick(frame)
 end
 
 local function Button_OnDoubleClick(button)
+	if button.treeline and button.treeline.noToggle then return end
 	local self = button.obj
 	local status = (self.status or self.localstatus).groups
 	status[button.uniquevalue] = not status[button.uniquevalue]
