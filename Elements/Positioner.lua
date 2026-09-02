@@ -1,21 +1,137 @@
 local _, UUF = ...
 
-function UUF:CreatePositionController()
-    local ECDM = ""
+local function GetAyijeEssentialAnchor()
+	if not C_AddOns.IsAddOnLoaded("Ayije_CDM") then return nil end
 
-    if C_AddOns.IsAddOnLoaded("SkironCooldownManager") then
-        ECDM = _G["SCM_GroupAnchor_1"]
+	local CDM = _G["Ayije_CDM"]
+	if not CDM then return nil end
+
+	if CDM.anchorContainers and CDM.anchorContainers["EssentialCooldownViewer"] then
+		return CDM.anchorContainers["EssentialCooldownViewer"]
+	end
+
+	return nil
+end
+
+local function GetPhysicalPixelSize()
+	local CDM = C_AddOns.IsAddOnLoaded("Ayije_CDM") and _G["Ayije_CDM"] or nil
+	if CDM and CDM.Pixel and CDM.Pixel.GetSize then
+		if CDM.Pixel.Update then CDM.Pixel.Update() end
+		local pixel = CDM.Pixel.GetSize()
+		if pixel and pixel > 0 then return pixel end
+	end
+
+	local _, physicalHeight = GetPhysicalScreenSize()
+	local scale = UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
+	if physicalHeight and physicalHeight > 0 and scale and scale > 0 then
+		return 768 / (physicalHeight * scale)
+	end
+
+	return 1
+end
+
+local function HasHorizontalEdge(point)
+	return point and (point:find("LEFT", 1, true) or point:find("RIGHT", 1, true))
+end
+
+local function HasVerticalEdge(point)
+	return point and (point:find("TOP", 1, true) or point:find("BOTTOM", 1, true))
+end
+
+local function GetRequiredAnchorPhase(point, dimension, pixel, horizontal)
+	local isEdge = horizontal and HasHorizontalEdge(point) or (not horizontal and HasVerticalEdge(point))
+	if isEdge then return 0 end
+
+	local dimensionPixels = math.floor((dimension or 0) / pixel + 0.5 + 0.001)
+	return dimensionPixels % 2 == 1 and pixel * 0.5 or 0
+end
+
+local function GetRelativeAnchorCoordinate(frame, point, horizontal)
+	if not frame then return nil end
+
+	if horizontal then
+		local left = frame:GetLeft()
+		local right = frame:GetRight()
+		if not left or not right then return nil end
+		if point and point:find("LEFT", 1, true) then return left end
+		if point and point:find("RIGHT", 1, true) then return right end
+		return (left + right) * 0.5
+	end
+
+	local top = frame:GetTop()
+	local bottom = frame:GetBottom()
+	if not top or not bottom then return nil end
+	if point and point:find("TOP", 1, true) then return top end
+	if point and point:find("BOTTOM", 1, true) then return bottom end
+	return (top + bottom) * 0.5
+end
+
+local function SnapAbsoluteToPhase(value, phase, pixel, direction)
+	local scaled = (value - phase) / pixel
+	local lower = math.floor(scaled)
+	local fraction = scaled - lower
+	local epsilon = 0.001
+	local snapped
+
+	if fraction < 0.5 - epsilon then
+		snapped = lower
+	elseif fraction > 0.5 + epsilon then
+		snapped = lower + 1
+	elseif direction and direction < 0 then
+		snapped = lower
+	else
+		snapped = lower + 1
+	end
+
+	return phase + snapped * pixel
+end
+
+local function SnapCDMOffset(unitFrame, parentFrame, point, relativePoint, offset, dimension, horizontal)
+	local pixel = GetPhysicalPixelSize()
+	if not pixel or pixel <= 0 then return offset end
+
+	local reference = GetRelativeAnchorCoordinate(parentFrame, relativePoint, horizontal)
+	if not reference then return offset end
+
+	local phase = GetRequiredAnchorPhase(point, dimension, pixel, horizontal)
+	local desired = reference + (offset or 0)
+	local direction = offset and offset ~= 0 and (offset > 0 and 1 or -1) or nil
+	local snapped = SnapAbsoluteToPhase(desired, phase, pixel, direction)
+
+	return snapped - reference
+end
+
+function UUF:PositionPrimaryUnitFrame(unitFrame, unit, parentFrame, FrameDB)
+	if not unitFrame or not FrameDB or not parentFrame then return end
+
+	local xOffset = FrameDB.Layout[3]
+	local yOffset = FrameDB.Layout[4]
+
+	if C_AddOns.IsAddOnLoaded("Ayije_CDM") and parentFrame == _G["UUF_CDMAnchor"] then
+		xOffset = SnapCDMOffset(unitFrame, parentFrame, FrameDB.Layout[1], FrameDB.Layout[2], xOffset, FrameDB.Width, true)
+		yOffset = SnapCDMOffset(unitFrame, parentFrame, FrameDB.Layout[1], FrameDB.Layout[2], yOffset, FrameDB.Height, false)
+	end
+
+	unitFrame:SetPoint(FrameDB.Layout[1], parentFrame, FrameDB.Layout[2], xOffset, yOffset)
+end
+
+function UUF:CreatePositionController()
+	local ECDM = ""
+
+	if C_AddOns.IsAddOnLoaded("SkironCooldownManager") then
+		ECDM = _G["SCM_GroupAnchor_1"]
 	elseif C_AddOns.IsAddOnLoaded("Coolinator") then
 		ECDM = _G["CoolinatorPrimaryGroupAnchor"]
-    else
-        ECDM = _G["EssentialCooldownViewer"]
-    end
+	elseif C_AddOns.IsAddOnLoaded("Ayije_CDM") then
+		ECDM = GetAyijeEssentialAnchor() or _G["EssentialCooldownViewer"]
+	else
+		ECDM = _G["EssentialCooldownViewer"]
+	end
 
-    if ECDM and ECDM:IsShown() then
-        local CDMAnchor = CreateFrame("Frame", "UUF_CDMAnchor", UIParent)
-        CDMAnchor:SetAllPoints(ECDM)
-        CDMAnchor:SetSize(ECDM:GetWidth() or 300, ECDM:GetHeight() or 48)
-    else
-        UUF:PrettyPrint("|cFF8080FFAnchor Point|r was not found.")
-    end
+	if ECDM and ECDM:IsShown() then
+		local CDMAnchor = CreateFrame("Frame", "UUF_CDMAnchor", UIParent)
+		CDMAnchor:SetAllPoints(ECDM)
+	else
+		UUF:PrettyPrint("|cFF8080FFAnchor Point|r was not found.")
+	end
 end
