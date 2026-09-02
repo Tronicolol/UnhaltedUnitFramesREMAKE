@@ -71,7 +71,7 @@ function UUF:CreateUnitHealthBar(unitFrame, unit)
         HealthBar.colorTapping = HealthBarDB.ColourWhenTapped
         HealthBar.colorDisconnected = HealthBarDB.ColourWhenDisconnected
         HealthBar.smoothing = HealthBarDB.Smooth ~= false and StatusBarInterpolation.ExponentialEaseOut or StatusBarInterpolation.Immediate
-		HealthBar.PostUpdateColor = function(healthBar, unit, colour)
+		HealthBar.PostUpdateColor = function(healthBar, liveUnit, colour)
 			if colour and colour ~= oUF.colors.health then return end
 			local currentHealthBarDB = UUF:GetUnitDB(unitFrame, unit).HealthBar
 			if unit == "pet" and currentHealthBarDB.ColourByClass then
