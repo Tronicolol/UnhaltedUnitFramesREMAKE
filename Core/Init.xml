@@ -6,6 +6,7 @@
     <Script file="TestEnvironment.lua"/>
     <Script file="UnitFrame.lua"/>
     <Script file="GroupFrames.lua"/>
+    <Script file="GroupCentering.lua"/>
 
     <Script file="Config/GUIWidgets.lua"/>
     <Script file="Config/GUI.lua"/>
