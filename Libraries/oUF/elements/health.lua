@@ -562,13 +562,21 @@ local function Enable(self, unit)
 			element.values:SetIncomingHealOverflowPercent(element.incomingHealOverflow)
 		end
 
-		self:RegisterEvent('UNIT_HEALTH', Path)
-		self:RegisterEvent('UNIT_MAXHEALTH', Path)
-		self:RegisterEvent('UNIT_CONNECTION', Path)
+		-- Raid can opt into an Ellesmere-style external unit-event driver. The
+		-- Health widget and all of its existing update functions remain owned by
+		-- oUF; only the high-frequency event registrations move off the secure
+		-- header child onto plain tracker frames.
+		local externalEventDriver = element.UUFExternalEventDriver == true
 
-		if(unit == 'party' or unit == 'raid') then
-			self:RegisterEvent('PARTY_MEMBER_ENABLE', Path)
-			self:RegisterEvent('PARTY_MEMBER_DISABLE', Path)
+		if(not externalEventDriver) then
+			self:RegisterEvent('UNIT_HEALTH', Path)
+			self:RegisterEvent('UNIT_MAXHEALTH', Path)
+			self:RegisterEvent('UNIT_CONNECTION', Path)
+
+			if(unit == 'party' or unit == 'raid') then
+				self:RegisterEvent('PARTY_MEMBER_ENABLE', Path)
+				self:RegisterEvent('PARTY_MEMBER_DISABLE', Path)
+			end
 		end
 
 		if(element.colorSelection) then
@@ -583,20 +591,22 @@ local function Enable(self, unit)
 			self:RegisterEvent('UNIT_THREAT_LIST_UPDATE', ColorPath)
 		end
 
-		if(element.HealingAll or element.HealingPlayer or element.HealingOther or element.OverHealIndicator) then
-			self:RegisterEvent('UNIT_HEAL_PREDICTION', Path)
-		end
+		if(not externalEventDriver) then
+			if(element.HealingAll or element.HealingPlayer or element.HealingOther or element.OverHealIndicator) then
+				self:RegisterEvent('UNIT_HEAL_PREDICTION', Path)
+			end
 
-		if(element.DamageAbsorb or element.OverDamageAbsorbIndicator) then
-			self:RegisterEvent('UNIT_ABSORB_AMOUNT_CHANGED', Path)
-		end
+			if(element.DamageAbsorb or element.OverDamageAbsorbIndicator) then
+				self:RegisterEvent('UNIT_ABSORB_AMOUNT_CHANGED', Path)
+			end
 
-		if(element.HealAbsorb or element.OverHealAbsorbIndicator) then
-			self:RegisterEvent('UNIT_HEAL_ABSORB_AMOUNT_CHANGED', Path)
-		end
+			if(element.HealAbsorb or element.OverHealAbsorbIndicator) then
+				self:RegisterEvent('UNIT_HEAL_ABSORB_AMOUNT_CHANGED', Path)
+			end
 
-		if(element.TempLoss) then
-			self:RegisterEvent('UNIT_MAX_HEALTH_MODIFIERS_CHANGED', Path)
+			if(element.TempLoss) then
+				self:RegisterEvent('UNIT_MAX_HEALTH_MODIFIERS_CHANGED', Path)
+			end
 		end
 
 		if(element:IsObjectType('StatusBar') and not element:GetStatusBarTexture()) then
