@@ -67,7 +67,7 @@ function UUF:CreateUnitHealthBar(unitFrame, unit)
         HealthBar:SetStatusBarColor(HealthBarDB.Foreground[1], HealthBarDB.Foreground[2], HealthBarDB.Foreground[3], HealthBarDB.ForegroundOpacity)
         HealthBar.colorClass = HealthBarDB.ColourByClass
         HealthBar.colorReaction = HealthBarDB.ColourByClass
-        HealthBar.colorHealth = not HealthBarDB.ColourByClass
+        HealthBar.colorHealth = false
         HealthBar.colorTapping = HealthBarDB.ColourWhenTapped
         HealthBar.colorDisconnected = HealthBarDB.ColourWhenDisconnected
         HealthBar.smoothing = HealthBarDB.Smooth ~= false and StatusBarInterpolation.ExponentialEaseOut or StatusBarInterpolation.Immediate
@@ -151,7 +151,7 @@ function UUF:UpdateUnitHealthBar(unitFrame, unit)
         unitFrame.Health:SetStatusBarColor(HealthBarDB.Foreground[1], HealthBarDB.Foreground[2], HealthBarDB.Foreground[3], HealthBarDB.ForegroundOpacity)
         unitFrame.Health.colorClass = HealthBarDB.ColourByClass
         unitFrame.Health.colorReaction = HealthBarDB.ColourByClass
-        unitFrame.Health.colorHealth = not HealthBarDB.ColourByClass
+        unitFrame.Health.colorHealth = false
         unitFrame.Health.colorTapping = HealthBarDB.ColourWhenTapped
         unitFrame.Health.colorDisconnected = HealthBarDB.ColourWhenDisconnected
         unitFrame.Health.smoothing = HealthBarDB.Smooth ~= false and StatusBarInterpolation.ExponentialEaseOut or StatusBarInterpolation.Immediate
