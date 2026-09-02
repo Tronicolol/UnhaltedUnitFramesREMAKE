@@ -1,9 +1,14 @@
 local _, UUF = ...
 
-local function GetAyijeEssentialAnchor()
-	if not C_AddOns.IsAddOnLoaded("Ayije_CDM") then return nil end
+local ayijeReanchorHooked = false
 
-	local CDM = _G["Ayije_CDM"]
+local function GetAyije()
+	if not C_AddOns.IsAddOnLoaded("Ayije_CDM") then return nil end
+	return _G["Ayije_CDM"]
+end
+
+local function GetAyijeEssentialAnchor()
+	local CDM = GetAyije()
 	if not CDM then return nil end
 
 	if CDM.anchorContainers and CDM.anchorContainers["EssentialCooldownViewer"] then
@@ -14,7 +19,7 @@ local function GetAyijeEssentialAnchor()
 end
 
 local function GetPhysicalPixelSize()
-	local CDM = C_AddOns.IsAddOnLoaded("Ayije_CDM") and _G["Ayije_CDM"] or nil
+	local CDM = GetAyije()
 	if CDM and CDM.Pixel and CDM.Pixel.GetSize then
 		if CDM.Pixel.Update then CDM.Pixel.Update() end
 		local pixel = CDM.Pixel.GetSize()
@@ -86,7 +91,7 @@ local function SnapAbsoluteToPhase(value, phase, pixel, direction)
 	return phase + snapped * pixel
 end
 
-local function SnapCDMOffset(unitFrame, parentFrame, point, relativePoint, offset, dimension, horizontal)
+local function SnapCDMOffset(parentFrame, point, relativePoint, offset, dimension, horizontal)
 	local pixel = GetPhysicalPixelSize()
 	if not pixel or pixel <= 0 then return offset end
 
@@ -101,19 +106,67 @@ local function SnapCDMOffset(unitFrame, parentFrame, point, relativePoint, offse
 	return snapped - reference
 end
 
-function UUF:PositionPrimaryUnitFrame(unitFrame, unit, parentFrame, FrameDB)
+function UUF:PositionPrimaryUnitFrame(unitFrame, parentFrame, FrameDB)
 	if not unitFrame or not FrameDB or not parentFrame then return end
 
 	local xOffset = FrameDB.Layout[3]
 	local yOffset = FrameDB.Layout[4]
 
-	if C_AddOns.IsAddOnLoaded("Ayije_CDM") and parentFrame == _G["UUF_CDMAnchor"] then
-		xOffset = SnapCDMOffset(unitFrame, parentFrame, FrameDB.Layout[1], FrameDB.Layout[2], xOffset, FrameDB.Width, true)
-		yOffset = SnapCDMOffset(unitFrame, parentFrame, FrameDB.Layout[1], FrameDB.Layout[2], yOffset, FrameDB.Height, false)
+	if GetAyije() and parentFrame == _G["UUF_CDMAnchor"] then
+		xOffset = SnapCDMOffset(parentFrame, FrameDB.Layout[1], FrameDB.Layout[2], xOffset, FrameDB.Width, true)
+		yOffset = SnapCDMOffset(parentFrame, FrameDB.Layout[1], FrameDB.Layout[2], yOffset, FrameDB.Height, false)
 	end
 
 	unitFrame:SetPoint(FrameDB.Layout[1], parentFrame, FrameDB.Layout[2], xOffset, yOffset)
 end
+
+local function ReapplyCDMPosition(unit)
+	if unit ~= "player" and unit ~= "target" then return end
+
+	local unitFrame = UUF[unit:upper()]
+	local UnitDB = UUF.db and UUF.db.profile and UUF.db.profile.Units and UUF.db.profile.Units[unit]
+	if not unitFrame or not UnitDB or not UnitDB.HealthBar.AnchorToCooldownViewer then return end
+
+	local parentFrame = _G["UUF_CDMAnchor"]
+	if not parentFrame then return end
+
+	unitFrame:ClearAllPoints()
+	UUF:PositionPrimaryUnitFrame(unitFrame, parentFrame, UnitDB.Frame)
+end
+
+local function ReapplyPrimaryFrames()
+	ReapplyCDMPosition("player")
+	ReapplyCDMPosition("target")
+end
+
+local function RefreshAyijeAnchorTarget()
+	local CDMAnchor = _G["UUF_CDMAnchor"]
+	local AyijeAnchor = GetAyijeEssentialAnchor()
+	if not CDMAnchor or not AyijeAnchor then return end
+
+	CDMAnchor:ClearAllPoints()
+	CDMAnchor:SetAllPoints(AyijeAnchor)
+end
+
+local function HookAyijeReanchor()
+	if ayijeReanchorHooked then return end
+
+	local CDM = GetAyije()
+	if not CDM or not CDM.ForceReanchor then return end
+
+	ayijeReanchorHooked = true
+	hooksecurefunc(CDM, "ForceReanchor", function(_, viewer)
+		if not viewer or not viewer.GetName or viewer:GetName() ~= "EssentialCooldownViewer" then return end
+		C_Timer.After(0, function()
+			RefreshAyijeAnchorTarget()
+			ReapplyPrimaryFrames()
+		end)
+	end)
+end
+
+hooksecurefunc(UUF, "UpdateUnitHealthBar", function(_, _, unit)
+	ReapplyCDMPosition(unit)
+end)
 
 function UUF:CreatePositionController()
 	local ECDM = ""
@@ -122,7 +175,7 @@ function UUF:CreatePositionController()
 		ECDM = _G["SCM_GroupAnchor_1"]
 	elseif C_AddOns.IsAddOnLoaded("Coolinator") then
 		ECDM = _G["CoolinatorPrimaryGroupAnchor"]
-	elseif C_AddOns.IsAddOnLoaded("Ayije_CDM") then
+	elseif GetAyije() then
 		ECDM = GetAyijeEssentialAnchor() or _G["EssentialCooldownViewer"]
 	else
 		ECDM = _G["EssentialCooldownViewer"]
@@ -131,6 +184,8 @@ function UUF:CreatePositionController()
 	if ECDM and ECDM:IsShown() then
 		local CDMAnchor = CreateFrame("Frame", "UUF_CDMAnchor", UIParent)
 		CDMAnchor:SetAllPoints(ECDM)
+		HookAyijeReanchor()
+		C_Timer.After(0, ReapplyPrimaryFrames)
 	else
 		UUF:PrettyPrint("|cFF8080FFAnchor Point|r was not found.")
 	end
