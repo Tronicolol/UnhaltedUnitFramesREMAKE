@@ -312,7 +312,7 @@ local function BuildMainNavigationTree()
 	unitNavigation[#unitNavigation + 1] = { text = "Boss", value = "Boss" }
 	return {
 		{ text = "General", value = "General" },
-		{text = "Global", value = "Global", children = {
+		{text = "Global", value = "Global", noToggle = true, children = {
 			{text = "Toggles", value = "GlobalToggles"},
 			{text = "Fonts", value = "GlobalFonts"},
 			{text = "Textures", value = "GlobalTextures"},
@@ -320,7 +320,7 @@ local function BuildMainNavigationTree()
 			{text = "Tag Settings", value = "GlobalTags"},
 			{text = "Cooldown Text", value = "CooldownText"},
 		}},
-		{text = "Units", value = "Units", children = unitNavigation},
+		{text = "Units", value = "Units", noToggle = true, children = unitNavigation},
 		{ text = "Tags", value = "Tags" },
 		{ text = "Profiles", value = "Profiles" },
 	}
@@ -915,13 +915,14 @@ local function CreateFrameSettings(containerParent, unit, unitHasParent, updateC
         ShowPlayerToggle:SetValue(FrameDB.ShowPlayer)
         ShowPlayerToggle:SetRelativeWidth(primaryToggleWidth)
         ShowPlayerToggle:SetCallback("OnValueChanged", function(_, _, value)
+            FrameDB.ShowPlayer = value
             StaticPopupDialogs["UUF_RELOAD_UI"] = {
                 text = "You must reload to apply this change, do you want to reload now?",
                 button1 = "Reload Now",
                 button2 = "Later",
                 showAlert = true,
-                OnAccept = function() FrameDB.ShowPlayer = value C_UI.Reload() end,
-                OnCancel = function() ShowPlayerToggle:SetValue(FrameDB.ShowPlayer) containerParent:DoLayout() end,
+                OnAccept = function() C_UI.Reload() end,
+                OnCancel = function() containerParent:DoLayout() end,
                 timeout = 0,
                 whileDead = true,
                 hideOnEscape = true,
@@ -935,13 +936,14 @@ local function CreateFrameSettings(containerParent, unit, unitHasParent, updateC
         ShowSoloPartyToggle:SetValue(FrameDB.ShowPlayerWhileSolo == true)
         ShowSoloPartyToggle:SetRelativeWidth(primaryToggleWidth)
         ShowSoloPartyToggle:SetCallback("OnValueChanged", function(_, _, value)
+            FrameDB.ShowPlayerWhileSolo = value
             StaticPopupDialogs["UUF_RELOAD_UI_SOLO_PARTY"] = {
                 text = "You must reload to apply this change, do you want to reload now?",
                 button1 = "Reload Now",
                 button2 = "Later",
                 showAlert = true,
-                OnAccept = function() FrameDB.ShowPlayerWhileSolo = value C_UI.Reload() end,
-                OnCancel = function() ShowSoloPartyToggle:SetValue(FrameDB.ShowPlayerWhileSolo == true) containerParent:DoLayout() end,
+                OnAccept = function() C_UI.Reload() end,
+                OnCancel = function() containerParent:DoLayout() end,
                 timeout = 0,
                 whileDead = true,
                 hideOnEscape = true,
@@ -4479,13 +4481,14 @@ local function CreateUnitSettings(containerParent, unit)
     EnableUnitFrameToggle:SetLabel("Enable |cFF8080FF"..(UnitDBToUnitPrettyName[unit] or unit) .."|r")
     EnableUnitFrameToggle:SetValue(GetUnitDB(unit).Enabled)
     EnableUnitFrameToggle:SetCallback("OnValueChanged", function(_, _, value)
+        GetUnitDB(unit).Enabled = value
         StaticPopupDialogs["UUF_RELOAD_UI"] = {
             text = "You must reload to apply this change, do you want to reload now?",
             button1 = "Reload Now",
             button2 = "Later",
             showAlert = true,
-            OnAccept = function() GetUnitDB(unit).Enabled= value C_UI.Reload() end,
-            OnCancel = function() EnableUnitFrameToggle:SetValue(GetUnitDB(unit).Enabled) containerParent:DoLayout() end,
+            OnAccept = function() C_UI.Reload() end,
+            OnCancel = function() containerParent:DoLayout() end,
             timeout = 0,
             whileDead = true,
             hideOnEscape = true,
@@ -4500,13 +4503,14 @@ local function CreateUnitSettings(containerParent, unit)
 		HideBlizzardToggle:SetLabel("Hide Blizzard |cFF8080FF"..(UnitDBToUnitPrettyName[unit] or unit) .."|r")
 		HideBlizzardToggle:SetValue(GetUnitDB(unit).ForceHideBlizzard)
 		HideBlizzardToggle:SetCallback("OnValueChanged", function(_, _, value)
+			GetUnitDB(unit).ForceHideBlizzard = value
 				StaticPopupDialogs["UUF_RELOAD_UI"] = {
 				text = "You must reload to apply this change, do you want to reload now?",
 				button1 = "Reload Now",
 				button2 = "Later",
 				showAlert = true,
-				OnAccept = function() GetUnitDB(unit).ForceHideBlizzard = value C_UI.Reload() end,
-				OnCancel = function() HideBlizzardToggle:SetValue(GetUnitDB(unit).ForceHideBlizzard) containerParent:DoLayout() end,
+				OnAccept = function() C_UI.Reload() end,
+				OnCancel = function() containerParent:DoLayout() end,
 				timeout = 0,
 				whileDead = true,
 				hideOnEscape = true,
@@ -5112,6 +5116,9 @@ function UUF:CreateGUI()
     end
 
     UUFGUI.MainNavigationStatus = UUFGUI.MainNavigationStatus or {}
+    UUFGUI.MainNavigationStatus.groups = UUFGUI.MainNavigationStatus.groups or {}
+    UUFGUI.MainNavigationStatus.groups.Global = true
+    UUFGUI.MainNavigationStatus.groups.Units = true
 
     local ContainerTreeGroup = AG:Create("TreeGroup")
     ContainerTreeGroup:SetLayout("Fill")
