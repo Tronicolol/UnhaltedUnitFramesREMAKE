@@ -1,0 +1,38 @@
+name: Package perf UI convenience
+
+on:
+  push:
+    branches:
+      - package-perf-ui-convenience
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build addon-relative overlay
+        run: |
+          mkdir -p package/Core/Config
+          mkdir -p package/Elements
+          mkdir -p package/Libraries/Ace3/AceGUI-3.0/widgets
+          mkdir -p package/Libraries/oUF/elements
+
+          cp Core/Config/GUI.lua package/Core/Config/GUI.lua
+          cp Elements/Init.xml package/Elements/Init.xml
+          cp Elements/RaidEventDriver.lua package/Elements/RaidEventDriver.lua
+          cp Elements/RealRaidFrameAB.lua package/Elements/RealRaidFrameAB.lua
+          cp Elements/RealRaidIdleProfiler.lua package/Elements/RealRaidIdleProfiler.lua
+          cp Elements/CombatAutoProfiler.lua package/Elements/CombatAutoProfiler.lua
+          cp Libraries/Ace3/AceGUI-3.0/widgets/AceGUIContainer-TreeGroup.lua package/Libraries/Ace3/AceGUI-3.0/widgets/AceGUIContainer-TreeGroup.lua
+          cp Libraries/oUF/elements/health.lua package/Libraries/oUF/elements/health.lua
+
+          cd package
+          zip -r ../UUF_perf-raid_ELLESMERE_COMBAT-AUTO_UI-CONVENIENCE.zip Core Elements Libraries
+
+      - name: Upload overlay
+        uses: actions/upload-artifact@v4
+        with:
+          name: UUF_perf-raid_ELLESMERE_COMBAT-AUTO_UI-CONVENIENCE
+          path: UUF_perf-raid_ELLESMERE_COMBAT-AUTO_UI-CONVENIENCE.zip
+          if-no-files-found: error
