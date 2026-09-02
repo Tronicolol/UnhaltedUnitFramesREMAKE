@@ -1,0 +1,178 @@
+name: Patch UI reload convenience
+
+on:
+  push:
+    branches:
+      - ui-reload-convenience
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ui-reload-convenience
+
+      - name: Audit reload prompts before patch
+        run: |
+          echo '--- Reload-related Lua references ---'
+          grep -RInE 'C_UI\.Reload|ReloadUI|StaticPopup_Show|button2 = "Later"' --include='*.lua' . || true
+
+      - name: Apply convenience patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          gui_path = Path('Core/Config/GUI.lua')
+          tree_path = Path('Libraries/Ace3/AceGUI-3.0/widgets/AceGUIContainer-TreeGroup.lua')
+          gui = gui_path.read_text()
+          tree = tree_path.read_text()
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1 match, got {count}')
+              return text.replace(old, new, 1)
+
+          # Save reload-required choices immediately. "Later" now means defer reload,
+          # not revert the checkbox that the user just selected.
+          gui = replace_once(
+              gui,
+              'ShowPlayerToggle:SetCallback("OnValueChanged", function(_, _, value)\n            StaticPopupDialogs["UUF_RELOAD_UI"] = {',
+              'ShowPlayerToggle:SetCallback("OnValueChanged", function(_, _, value)\n            FrameDB.ShowPlayer = value\n            StaticPopupDialogs["UUF_RELOAD_UI"] = {',
+              'ShowPlayer immediate save',
+          )
+          gui = replace_once(gui,
+              'OnAccept = function() FrameDB.ShowPlayer = value C_UI.Reload() end,',
+              'OnAccept = function() C_UI.Reload() end,',
+              'ShowPlayer accept')
+          gui = replace_once(gui,
+              'OnCancel = function() ShowPlayerToggle:SetValue(FrameDB.ShowPlayer) containerParent:DoLayout() end,',
+              'OnCancel = function() containerParent:DoLayout() end,',
+              'ShowPlayer later')
+
+          gui = replace_once(
+              gui,
+              'ShowSoloPartyToggle:SetCallback("OnValueChanged", function(_, _, value)\n            StaticPopupDialogs["UUF_RELOAD_UI_SOLO_PARTY"] = {',
+              'ShowSoloPartyToggle:SetCallback("OnValueChanged", function(_, _, value)\n            FrameDB.ShowPlayerWhileSolo = value\n            StaticPopupDialogs["UUF_RELOAD_UI_SOLO_PARTY"] = {',
+              'SoloParty immediate save',
+          )
+          gui = replace_once(gui,
+              'OnAccept = function() FrameDB.ShowPlayerWhileSolo = value C_UI.Reload() end,',
+              'OnAccept = function() C_UI.Reload() end,',
+              'SoloParty accept')
+          gui = replace_once(gui,
+              'OnCancel = function() ShowSoloPartyToggle:SetValue(FrameDB.ShowPlayerWhileSolo == true) containerParent:DoLayout() end,',
+              'OnCancel = function() containerParent:DoLayout() end,',
+              'SoloParty later')
+
+          gui = replace_once(
+              gui,
+              'EnableUnitFrameToggle:SetCallback("OnValueChanged", function(_, _, value)\n        StaticPopupDialogs["UUF_RELOAD_UI"] = {',
+              'EnableUnitFrameToggle:SetCallback("OnValueChanged", function(_, _, value)\n        GetUnitDB(unit).Enabled = value\n        StaticPopupDialogs["UUF_RELOAD_UI"] = {',
+              'EnableUnit immediate save',
+          )
+          gui = replace_once(gui,
+              'OnAccept = function() GetUnitDB(unit).Enabled= value C_UI.Reload() end,',
+              'OnAccept = function() C_UI.Reload() end,',
+              'EnableUnit accept')
+          gui = replace_once(gui,
+              'OnCancel = function() EnableUnitFrameToggle:SetValue(GetUnitDB(unit).Enabled) containerParent:DoLayout() end,',
+              'OnCancel = function() containerParent:DoLayout() end,',
+              'EnableUnit later')
+
+          gui = replace_once(
+              gui,
+              'HideBlizzardToggle:SetCallback("OnValueChanged", function(_, _, value)\n\t\t\t\tStaticPopupDialogs["UUF_RELOAD_UI"] = {',
+              'HideBlizzardToggle:SetCallback("OnValueChanged", function(_, _, value)\n\t\t\tGetUnitDB(unit).ForceHideBlizzard = value\n\t\t\t\tStaticPopupDialogs["UUF_RELOAD_UI"] = {',
+              'HideBlizzard immediate save',
+          )
+          gui = replace_once(gui,
+              'OnAccept = function() GetUnitDB(unit).ForceHideBlizzard = value C_UI.Reload() end,',
+              'OnAccept = function() C_UI.Reload() end,',
+              'HideBlizzard accept')
+          gui = replace_once(gui,
+              'OnCancel = function() HideBlizzardToggle:SetValue(GetUnitDB(unit).ForceHideBlizzard) containerParent:DoLayout() end,',
+              'OnCancel = function() containerParent:DoLayout() end,',
+              'HideBlizzard later')
+
+          # Global and Units are permanent expanded navigation sections.
+          gui = replace_once(gui,
+              '{text = "Global", value = "Global", children = {',
+              '{text = "Global", value = "Global", noToggle = true, children = {',
+              'Global noToggle')
+          gui = replace_once(gui,
+              '{text = "Units", value = "Units", children = unitNavigation},',
+              '{text = "Units", value = "Units", noToggle = true, children = unitNavigation},',
+              'Units noToggle')
+          gui = replace_once(gui,
+              '    UUFGUI.MainNavigationStatus = UUFGUI.MainNavigationStatus or {}\n\n    local ContainerTreeGroup = AG:Create("TreeGroup")',
+              '    UUFGUI.MainNavigationStatus = UUFGUI.MainNavigationStatus or {}\n    UUFGUI.MainNavigationStatus.groups = UUFGUI.MainNavigationStatus.groups or {}\n    UUFGUI.MainNavigationStatus.groups.Global = true\n    UUFGUI.MainNavigationStatus.groups.Units = true\n\n    local ContainerTreeGroup = AG:Create("TreeGroup")',
+              'Force navigation groups open')
+
+          # Backwards-compatible TreeGroup extension: noToggle hides the +/- control
+          # and prevents double-click collapse only for tree entries that request it.
+          tree = replace_once(tree,
+              '\tlocal disabled = treeline.disabled\n',
+              '\tlocal disabled = treeline.disabled\n\tlocal noToggle = treeline.noToggle\n',
+              'Tree noToggle local')
+          tree = replace_once(tree,
+              '\tif canExpand then\n',
+              '\tif canExpand and not noToggle then\n',
+              'Tree hide toggle')
+          tree = replace_once(tree,
+              '\tline.visible = v.visible\n',
+              '\tline.visible = v.visible\n\tline.noToggle = v.noToggle\n',
+              'Tree carry noToggle')
+          tree = replace_once(tree,
+              'local function Expand_OnClick(frame)\n\tlocal button = frame.button\n\tlocal self = button.obj\n',
+              'local function Expand_OnClick(frame)\n\tlocal button = frame.button\n\tif button.treeline and button.treeline.noToggle then return end\n\tlocal self = button.obj\n',
+              'Tree toggle guard')
+          tree = replace_once(tree,
+              'local function Button_OnDoubleClick(button)\n\tlocal self = button.obj\n',
+              'local function Button_OnDoubleClick(button)\n\tif button.treeline and button.treeline.noToggle then return end\n\tlocal self = button.obj\n',
+              'Tree double click guard')
+
+          gui_path.write_text(gui)
+          tree_path.write_text(tree)
+          PY
+
+      - name: Validate patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          gui = Path('Core/Config/GUI.lua').read_text()
+          tree = Path('Libraries/Ace3/AceGUI-3.0/widgets/AceGUIContainer-TreeGroup.lua').read_text()
+
+          checks = {
+              'four Later buttons remain': gui.count('button2 = "Later"') == 4,
+              'no reload accept mutates setting': 'value C_UI.Reload()' not in gui,
+              'no Later callback resets checkbox': 'OnCancel = function() ShowPlayerToggle:SetValue' not in gui
+                  and 'OnCancel = function() ShowSoloPartyToggle:SetValue' not in gui
+                  and 'OnCancel = function() EnableUnitFrameToggle:SetValue' not in gui
+                  and 'OnCancel = function() HideBlizzardToggle:SetValue' not in gui,
+              'Global permanently expanded': 'groups.Global = true' in gui and 'value = "Global", noToggle = true' in gui,
+              'Units permanently expanded': 'groups.Units = true' in gui and 'value = "Units", noToggle = true' in gui,
+              'TreeGroup noToggle supported': 'treeline.noToggle' in tree and 'line.noToggle = v.noToggle' in tree,
+          }
+
+          failed = [name for name, ok in checks.items() if not ok]
+          for name, ok in checks.items():
+              print(('PASS ' if ok else 'FAIL ') + name)
+          if failed:
+              raise SystemExit('Validation failed: ' + ', '.join(failed))
+          PY
+
+          echo '--- Reload-related Lua references after patch ---'
+          grep -RInE 'C_UI\.Reload|ReloadUI|StaticPopup_Show|button2 = "Later"' --include='*.lua' . || true
+
+      - name: Commit patch
+        run: |
+          git config user.name "Tronicolol"
+          git config user.email "54152736+Tronicolol@users.noreply.github.com"
+          git add Core/Config/GUI.lua Libraries/Ace3/AceGUI-3.0/widgets/AceGUIContainer-TreeGroup.lua
+          git commit -m "Keep reload choices and navigation open [skip ci]"
+          git push
