@@ -1,5 +1,41 @@
 local _, UUF = ...
 
+local function GetLiveTagUnit(unitFrame, unit)
+	if unitFrame and unitFrame.unit then return unitFrame.unit end
+	if unit == "partyplayer" then return "player" end
+	return unit
+end
+
+local function GetTagColour(unitFrame, unit, TagDB)
+	local UnitDB = UUF:GetUnitDB(unitFrame, unit)
+	local liveUnit = GetLiveTagUnit(unitFrame, unit)
+
+	if UnitDB and UnitDB.HealthBar and UnitDB.HealthBar.ColourByClass == false and liveUnit and UnitExists(liveUnit) and UnitIsPlayer(liveUnit) then
+		local _, class = UnitClass(liveUnit)
+		if class and not UUF:IsSecretValue(class) then
+			local classColour = RAID_CLASS_COLORS[class]
+			if classColour then return classColour.r, classColour.g, classColour.b end
+		end
+	end
+
+	return TagDB.Colour[1], TagDB.Colour[2], TagDB.Colour[3]
+end
+
+local function ApplyTagColour(unitFrame, unit, tagDB)
+	if not unitFrame or not unitFrame.Tags or not unitFrame.Tags[tagDB] then return end
+	local TagDB = UUF:GetUnitDB(unitFrame, unit).Tags[tagDB]
+	if not TagDB then return end
+	local r, g, b = GetTagColour(unitFrame, unit, TagDB)
+	unitFrame.Tags[tagDB]:SetVertexColor(r, g, b, 1)
+end
+
+local function RefreshFrameTagColours(unitFrame, unit)
+	if not unitFrame or not unitFrame.Tags then return end
+	local UnitDB = UUF:GetUnitDB(unitFrame, unit)
+	if not UnitDB or not UnitDB.Tags then return end
+	for tagDB in pairs(UnitDB.Tags) do ApplyTagColour(unitFrame, unit, tagDB) end
+end
+
 local function CreateUnitTag(unitFrame, unit, tagDB)
 	local GeneralDB = UUF.db.profile.General
 	local TagDB = UUF:GetUnitDB(unitFrame, unit).Tags[tagDB]
@@ -7,7 +43,8 @@ local function CreateUnitTag(unitFrame, unit, tagDB)
 	if not unitFrame.Tags[tagDB] then
 		unitFrame.Tags[tagDB] = unitFrame.HighLevelContainer:CreateFontString(UUF:FetchFrameName(unit) .. "_" .. tagDB, "ARTWORK", "GameFontNormal")
 		unitFrame.Tags[tagDB]:SetFont(UUF.Media.Font, TagDB.FontSize, GeneralDB.Fonts.FontFlag)
-		unitFrame.Tags[tagDB]:SetVertexColor(TagDB.Colour[1], TagDB.Colour[2], TagDB.Colour[3], 1)
+		local r, g, b = GetTagColour(unitFrame, unit, TagDB)
+		unitFrame.Tags[tagDB]:SetVertexColor(r, g, b, 1)
 		if GeneralDB.Fonts.Shadow.Enabled then
 			unitFrame.Tags[tagDB]:SetShadowColor(GeneralDB.Fonts.Shadow.Colour[1], GeneralDB.Fonts.Shadow.Colour[2], GeneralDB.Fonts.Shadow.Colour[3], GeneralDB.Fonts.Shadow.Colour[4])
 			unitFrame.Tags[tagDB]:SetShadowOffset(GeneralDB.Fonts.Shadow.XPos, GeneralDB.Fonts.Shadow.YPos)
@@ -42,7 +79,7 @@ function UUF:UpdateUnitTag(unitFrame, unit, tagDB)
 	if not unitFrame.Tags[tagDB] then return end
 
 	unitFrame.Tags[tagDB]:SetFont(UUF.Media.Font, TagDB.FontSize, GeneralDB.Fonts.FontFlag)
-	unitFrame.Tags[tagDB]:SetVertexColor(TagDB.Colour[1], TagDB.Colour[2], TagDB.Colour[3], 1)
+	ApplyTagColour(unitFrame, unit, tagDB)
 	if GeneralDB.Fonts.Shadow.Enabled then
 		unitFrame.Tags[tagDB]:SetShadowColor(GeneralDB.Fonts.Shadow.Colour[1], GeneralDB.Fonts.Shadow.Colour[2], GeneralDB.Fonts.Shadow.Colour[3], GeneralDB.Fonts.Shadow.Colour[4])
 		unitFrame.Tags[tagDB]:SetShadowOffset(GeneralDB.Fonts.Shadow.XPos, GeneralDB.Fonts.Shadow.YPos)
@@ -109,3 +146,25 @@ function UUF:UpdateUnitTags(unit, tagName)
 		UpdateFrameTags(UUF[unit:upper()], unit)
 	end
 end
+
+hooksecurefunc(UUF, "UpdateUnitHealthBar", function(_, unitFrame, unit)
+	RefreshFrameTagColours(unitFrame, unit)
+end)
+
+local TagColourEventFrame = CreateFrame("Frame")
+TagColourEventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
+TagColourEventFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")
+TagColourEventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
+TagColourEventFrame:SetScript("OnEvent", function(_, event)
+	if not UUF.db then return end
+	if event == "PLAYER_TARGET_CHANGED" then
+		UUF:UpdateUnitTags("target")
+		UUF:UpdateUnitTags("targettarget")
+	elseif event == "PLAYER_FOCUS_CHANGED" then
+		UUF:UpdateUnitTags("focus")
+		UUF:UpdateUnitTags("focustarget")
+	elseif event == "GROUP_ROSTER_UPDATE" then
+		UUF:UpdateUnitTags("party")
+		UUF:UpdateUnitTags("raid")
+	end
+end)
