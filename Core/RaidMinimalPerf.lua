@@ -3,9 +3,46 @@ local _, UUF = ...
 local OriginalCreateUnitFrame = UUF.CreateUnitFrame
 local OriginalUpdateUnitFrame = UUF.UpdateUnitFrame
 local OriginalUpdateGroupIndicators = UUF.UpdateGroupIndicators
+local OriginalCreateUnitTags = UUF.CreateUnitTags
+local OriginalUpdateUnitTag = UUF.UpdateUnitTag
+local OriginalUpdateUnitTags = UUF.UpdateUnitTags
+local OriginalCreateUnitAuras = UUF.CreateUnitAuras
+local OriginalUpdateUnitAuras = UUF.UpdateUnitAuras
+local OriginalRefreshMidnightManagedAuras = UUF.RefreshMidnightManagedAuras
+local OriginalRetargetManagedGroupAurasForUnitChange = UUF.RetargetManagedGroupAurasForUnitChange
 
 local function IsRaidUnit(unit)
-	return UUF:GetNormalizedUnit(unit) == "raid"
+	return type(unit) == "string" and UUF:GetNormalizedUnit(unit) == "raid"
+end
+
+local function DisableAuraContainer(container)
+	if not container then return end
+	if container.SetEnabled then pcall(container.SetEnabled, container, false) end
+	pcall(container.Hide, container)
+end
+
+local function StripMinimalRaidExtras(unitFrame)
+	if not unitFrame then return end
+
+	UUF:UnregisterRangeFrame(unitFrame)
+	UUF:UnregisterTargetGlowIndicatorFrame(unitFrame)
+	if unitFrame.DispelHighlightUnit then UUF:UnregisterDispelHighlightEvents(unitFrame) end
+
+	DisableAuraContainer(unitFrame.UUFManagedTargetBuffs)
+	DisableAuraContainer(unitFrame.UUFManagedTargetDebuffs)
+	DisableAuraContainer(unitFrame.UUFManagedTargetDebuffsClip)
+	DisableAuraContainer(unitFrame.UUFManagedPartyRaidCustomAuras)
+	DisableAuraContainer(unitFrame.UUFManagedDispelHighlight)
+	DisableAuraContainer(unitFrame.BuffContainer)
+	DisableAuraContainer(unitFrame.DebuffContainer)
+	DisableAuraContainer(unitFrame.CustomAuraContainer)
+	DisableAuraContainer(unitFrame.PrivateAuraContainer)
+
+	if unitFrame.IsElementEnabled and unitFrame.DisableElement then
+		if unitFrame:IsElementEnabled("Auras") then unitFrame:DisableElement("Auras") end
+		if unitFrame:IsElementEnabled("CustomAuras") then unitFrame:DisableElement("CustomAuras") end
+		if unitFrame:IsElementEnabled("Power") then unitFrame:DisableElement("Power") end
+	end
 end
 
 local function ApplyMinimalRaidScripts(unitFrame)
@@ -45,7 +82,7 @@ function UUF:CreateUnitFrame(unitFrame, unit)
 		return OriginalCreateUnitFrame(self, unitFrame, unit)
 	end
 
-	if not unit or not unitFrame then return end
+	if not unitFrame then return end
 	if unitFrame:GetParent() == UUF.AUGMENTATION_RAID_HEADER then
 		unitFrame.isAugmentationRaidFrame = true
 	end
@@ -53,6 +90,7 @@ function UUF:CreateUnitFrame(unitFrame, unit)
 	UUF:CreateUnitContainer(unitFrame, unit)
 	UUF:CreateUnitHealthBar(unitFrame, unit)
 	CreateMinimalRaidName(unitFrame, unit)
+	StripMinimalRaidExtras(unitFrame)
 
 	unitFrame.UUFConfiguredUnit = unit
 	unitFrame:HookScript("OnAttributeChanged", function(frame, attribute, value)
@@ -60,11 +98,13 @@ function UUF:CreateUnitFrame(unitFrame, unit)
 		if not value then
 			frame.UUFGroupUnit = nil
 			if frame.UUFMinimalRaidName then frame.UUFMinimalRaidName:SetText("") end
+			StripMinimalRaidExtras(frame)
 			return
 		end
 
 		frame.UUFGroupUnit = value
 		UpdateMinimalRaidName(frame, value)
+		StripMinimalRaidExtras(frame)
 		if frame.Health then frame.Health:ForceUpdate() end
 	end)
 
@@ -82,6 +122,7 @@ function UUF:UpdateUnitFrame(unitFrame, unit)
 	local UnitDB = UUF:GetUnitDB(unitFrame, unit)
 	if not UnitDB then return end
 
+	StripMinimalRaidExtras(unitFrame)
 	UUF:UpdateUnitHealthBar(unitFrame, unit)
 	UpdateMinimalRaidName(unitFrame, unit)
 	unitFrame:SetFrameStrata(UnitDB.Frame.FrameStrata)
@@ -92,12 +133,59 @@ function UUF:UpdateGroupIndicators(groupType, onlyUpdateRoles)
 		return OriginalUpdateGroupIndicators(self, groupType, onlyUpdateRoles)
 	end
 
-	-- The normal group lifecycle re-registers Range/TargetGlow/Role after
-	-- combat or role changes. The minimal benchmark must keep those paths off.
 	UUF:ForEachRaidFrame(function(raidFrame)
-		UUF:UnregisterRangeFrame(raidFrame)
-		UUF:UnregisterTargetGlowIndicatorFrame(raidFrame)
-		if raidFrame.DispelHighlightUnit then UUF:UnregisterDispelHighlightEvents(raidFrame) end
+		StripMinimalRaidExtras(raidFrame)
 		raidFrame.UUFGroupUnit = raidFrame.unit
 	end, true, UUF.RAID_TEST_MODE)
+end
+
+function UUF:CreateUnitTags(unitFrame, unit)
+	if IsRaidUnit(unit) then return end
+	return OriginalCreateUnitTags(self, unitFrame, unit)
+end
+
+function UUF:UpdateUnitTag(unitFrame, unit, tagDB)
+	if IsRaidUnit(unit) then return end
+	return OriginalUpdateUnitTag(self, unitFrame, unit, tagDB)
+end
+
+function UUF:UpdateUnitTags(unit, tagName)
+	if IsRaidUnit(unit) then return end
+	return OriginalUpdateUnitTags(self, unit, tagName)
+end
+
+function UUF:CreateUnitAuras(unitFrame, unit)
+	if IsRaidUnit(unit) then
+		StripMinimalRaidExtras(unitFrame)
+		return
+	end
+	return OriginalCreateUnitAuras(self, unitFrame, unit)
+end
+
+function UUF:UpdateUnitAuras(unitFrame, unit)
+	if IsRaidUnit(unit) then
+		StripMinimalRaidExtras(unitFrame)
+		return
+	end
+	return OriginalUpdateUnitAuras(self, unitFrame, unit)
+end
+
+if type(OriginalRefreshMidnightManagedAuras) == "function" then
+	function UUF:RefreshMidnightManagedAuras(unitFrame, unit, ...)
+		if IsRaidUnit(unit) then
+			StripMinimalRaidExtras(unitFrame)
+			return
+		end
+		return OriginalRefreshMidnightManagedAuras(self, unitFrame, unit, ...)
+	end
+end
+
+if type(OriginalRetargetManagedGroupAurasForUnitChange) == "function" then
+	function UUF:RetargetManagedGroupAurasForUnitChange(unitFrame, unit, ...)
+		if IsRaidUnit(unit) then
+			StripMinimalRaidExtras(unitFrame)
+			return
+		end
+		return OriginalRetargetManagedGroupAurasForUnitChange(self, unitFrame, unit, ...)
+	end
 end
