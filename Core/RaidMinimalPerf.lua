@@ -39,6 +39,7 @@ local function StripMinimalRaidExtras(unitFrame)
 	DisableAuraContainer(unitFrame.PrivateAuraContainer)
 
 	if unitFrame.IsElementEnabled and unitFrame.DisableElement then
+		if unitFrame:IsElementEnabled("Health") then unitFrame:DisableElement("Health") end
 		if unitFrame:IsElementEnabled("Auras") then unitFrame:DisableElement("Auras") end
 		if unitFrame:IsElementEnabled("CustomAuras") then unitFrame:DisableElement("CustomAuras") end
 		if unitFrame:IsElementEnabled("Power") then unitFrame:DisableElement("Power") end
@@ -87,8 +88,9 @@ function UUF:CreateUnitFrame(unitFrame, unit)
 		unitFrame.isAugmentationRaidFrame = true
 	end
 
+	-- Intentionally no Health/Power/Auras/Tags/indicators. This benchmark
+	-- measures the secure raid-frame + oUF/header + name/click base cost only.
 	UUF:CreateUnitContainer(unitFrame, unit)
-	UUF:CreateUnitHealthBar(unitFrame, unit)
 	CreateMinimalRaidName(unitFrame, unit)
 	StripMinimalRaidExtras(unitFrame)
 
@@ -105,7 +107,6 @@ function UUF:CreateUnitFrame(unitFrame, unit)
 		frame.UUFGroupUnit = value
 		UpdateMinimalRaidName(frame, value)
 		StripMinimalRaidExtras(frame)
-		if frame.Health then frame.Health:ForceUpdate() end
 	end)
 
 	ApplyMinimalRaidScripts(unitFrame)
@@ -123,8 +124,8 @@ function UUF:UpdateUnitFrame(unitFrame, unit)
 	if not UnitDB then return end
 
 	StripMinimalRaidExtras(unitFrame)
-	UUF:UpdateUnitHealthBar(unitFrame, unit)
 	UpdateMinimalRaidName(unitFrame, unit)
+	unitFrame:SetSize(UnitDB.Frame.Width, UnitDB.Frame.Height)
 	unitFrame:SetFrameStrata(UnitDB.Frame.FrameStrata)
 end
 
