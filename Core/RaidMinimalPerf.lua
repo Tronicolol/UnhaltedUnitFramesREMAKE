@@ -11,6 +11,18 @@ local OriginalUpdateUnitAuras = UUF.UpdateUnitAuras
 local OriginalRefreshMidnightManagedAuras = UUF.RefreshMidnightManagedAuras
 local OriginalRetargetManagedGroupAurasForUnitChange = UUF.RetargetManagedGroupAurasForUnitChange
 
+local StatusBarInterpolation = Enum.StatusBarInterpolation
+
+local HealthTo100Curve = C_CurveUtil.CreateCurve()
+HealthTo100Curve:SetType(Enum.LuaCurveType.Linear)
+HealthTo100Curve:AddPoint(0.0, 0)
+HealthTo100Curve:AddPoint(1.0, 100)
+
+local MissingTo100Curve = C_CurveUtil.CreateCurve()
+MissingTo100Curve:SetType(Enum.LuaCurveType.Linear)
+MissingTo100Curve:AddPoint(0.0, 100)
+MissingTo100Curve:AddPoint(1.0, 0)
+
 local function IsRaidUnit(unit)
 	return type(unit) == "string" and UUF:GetNormalizedUnit(unit) == "raid"
 end
@@ -39,6 +51,7 @@ local function StripMinimalRaidExtras(unitFrame)
 	DisableAuraContainer(unitFrame.PrivateAuraContainer)
 
 	if unitFrame.IsElementEnabled and unitFrame.DisableElement then
+		if unitFrame:IsElementEnabled("Health") then unitFrame:DisableElement("Health") end
 		if unitFrame:IsElementEnabled("Auras") then unitFrame:DisableElement("Auras") end
 		if unitFrame:IsElementEnabled("CustomAuras") then unitFrame:DisableElement("CustomAuras") end
 		if unitFrame:IsElementEnabled("Power") then unitFrame:DisableElement("Power") end
@@ -77,6 +90,115 @@ local function CreateMinimalRaidName(unitFrame, unit)
 	UpdateMinimalRaidName(unitFrame, unit)
 end
 
+local function ApplyDirectHealthAppearance(unitFrame, unit)
+	local health = unitFrame and unitFrame.UUFMinimalRaidHealth
+	local background = unitFrame and unitFrame.HealthBackground
+	local UnitDB = UUF:GetUnitDB(unitFrame, unit)
+	if not health or not background or not UnitDB then return end
+
+	local FrameDB = UnitDB.Frame
+	local HealthBarDB = UnitDB.HealthBar
+
+	unitFrame:SetSize(FrameDB.Width, FrameDB.Height)
+	health:SetSize(FrameDB.Width - 2, FrameDB.Height - 2)
+	background:SetSize(FrameDB.Width - 2, FrameDB.Height - 2)
+	health:SetStatusBarTexture(UUF.Media.Foreground)
+	background:SetStatusBarTexture(UUF.Media.Background)
+	health.smoothing = HealthBarDB.Smooth ~= false and StatusBarInterpolation.ExponentialEaseOut or StatusBarInterpolation.Immediate
+
+	if HealthBarDB.Inverse then
+		health:SetReverseFill(true)
+		background:SetReverseFill(false)
+	else
+		health:SetReverseFill(false)
+		background:SetReverseFill(true)
+	end
+
+	local liveUnit = unitFrame:GetAttribute("unit") or unit
+	if HealthBarDB.ColourByClass and liveUnit then
+		local r, g, b = UUF:GetUnitColour(liveUnit)
+		health:SetStatusBarColor(r, g, b, HealthBarDB.ForegroundOpacity)
+	else
+		health:SetStatusBarColor(HealthBarDB.Foreground[1], HealthBarDB.Foreground[2], HealthBarDB.Foreground[3], HealthBarDB.ForegroundOpacity)
+	end
+
+	if HealthBarDB.ColourBackgroundByClass and liveUnit then
+		local r, g, b = UUF:GetUnitColour(liveUnit)
+		background:SetStatusBarColor(r, g, b, HealthBarDB.BackgroundOpacity)
+	else
+		background:SetStatusBarColor(HealthBarDB.Background[1], HealthBarDB.Background[2], HealthBarDB.Background[3], HealthBarDB.BackgroundOpacity)
+	end
+end
+
+local function PaintDirectHealth(unitFrame, unit)
+	local health = unitFrame and unitFrame.UUFMinimalRaidHealth
+	local background = unitFrame and unitFrame.HealthBackground
+	if not health or not background or not unit or not UnitExists(unit) then return end
+
+	if not health.UUFDirectPercentRange then
+		health:SetMinMaxValues(0, 100)
+		background:SetMinMaxValues(0, 100)
+		health.UUFDirectPercentRange = true
+	end
+
+	local healthPercent = UnitHealthPercent(unit, true, HealthTo100Curve)
+	local missingPercent = UnitHealthPercent(unit, true, MissingTo100Curve)
+	local connected = UnitIsConnected(unit)
+
+	if not UUF:IsSecretValue(connected) and connected == false then
+		health:SetValue(100, health.smoothing)
+		background:SetValue(0, health.smoothing)
+	else
+		health:SetValue(healthPercent, health.smoothing)
+		background:SetValue(missingPercent, health.smoothing)
+	end
+end
+
+local function UnbindDirectHealthTracker(unitFrame)
+	local tracker = unitFrame and unitFrame.UUFMinimalRaidHealthTracker
+	if not tracker then return end
+	tracker:UnregisterAllEvents()
+	tracker.UUFUnit = nil
+end
+
+local function BindDirectHealthTracker(unitFrame, unit)
+	if not unitFrame then return end
+
+	local tracker = unitFrame.UUFMinimalRaidHealthTracker
+	if not tracker then
+		tracker = CreateFrame("Frame")
+		unitFrame.UUFMinimalRaidHealthTracker = tracker
+		tracker.UUFFrame = unitFrame
+		tracker:SetScript("OnEvent", function(self, _, eventUnit)
+			local liveUnit = self.UUFUnit
+			if not liveUnit or (eventUnit and eventUnit ~= liveUnit) then return end
+			PaintDirectHealth(self.UUFFrame, liveUnit)
+		end)
+	end
+
+	tracker:UnregisterAllEvents()
+	tracker.UUFUnit = unit
+	if not unit then return end
+
+	tracker:RegisterUnitEvent("UNIT_HEALTH", unit)
+	tracker:RegisterUnitEvent("UNIT_MAXHEALTH", unit)
+	tracker:RegisterUnitEvent("UNIT_CONNECTION", unit)
+	PaintDirectHealth(unitFrame, unit)
+end
+
+local function CreateDirectRaidHealth(unitFrame, unit)
+	UUF:CreateUnitHealthBar(unitFrame, unit)
+
+	-- Keep the StatusBar UUF already creates, but remove the `Health` field
+	-- before oUF enables elements. This prevents oUF's Health element from
+	-- registering any health/prediction events for this benchmark.
+	unitFrame.UUFMinimalRaidHealth = unitFrame.Health
+	unitFrame.Health = nil
+
+	ApplyDirectHealthAppearance(unitFrame, unit)
+	BindDirectHealthTracker(unitFrame, unitFrame:GetAttribute("unit") or unit)
+end
+
 function UUF:CreateUnitFrame(unitFrame, unit)
 	if not IsRaidUnit(unit) then
 		return OriginalCreateUnitFrame(self, unitFrame, unit)
@@ -88,7 +210,7 @@ function UUF:CreateUnitFrame(unitFrame, unit)
 	end
 
 	UUF:CreateUnitContainer(unitFrame, unit)
-	UUF:CreateUnitHealthBar(unitFrame, unit)
+	CreateDirectRaidHealth(unitFrame, unit)
 	CreateMinimalRaidName(unitFrame, unit)
 	StripMinimalRaidExtras(unitFrame)
 
@@ -98,14 +220,16 @@ function UUF:CreateUnitFrame(unitFrame, unit)
 		if not value then
 			frame.UUFGroupUnit = nil
 			if frame.UUFMinimalRaidName then frame.UUFMinimalRaidName:SetText("") end
+			UnbindDirectHealthTracker(frame)
 			StripMinimalRaidExtras(frame)
 			return
 		end
 
 		frame.UUFGroupUnit = value
 		UpdateMinimalRaidName(frame, value)
+		ApplyDirectHealthAppearance(frame, value)
+		BindDirectHealthTracker(frame, value)
 		StripMinimalRaidExtras(frame)
-		if frame.Health then frame.Health:ForceUpdate() end
 	end)
 
 	ApplyMinimalRaidScripts(unitFrame)
@@ -123,8 +247,10 @@ function UUF:UpdateUnitFrame(unitFrame, unit)
 	if not UnitDB then return end
 
 	StripMinimalRaidExtras(unitFrame)
-	UUF:UpdateUnitHealthBar(unitFrame, unit)
-	UpdateMinimalRaidName(unitFrame, unit)
+	ApplyDirectHealthAppearance(unitFrame, unit)
+	local liveUnit = unitFrame:GetAttribute("unit") or unit
+	BindDirectHealthTracker(unitFrame, liveUnit)
+	UpdateMinimalRaidName(unitFrame, liveUnit)
 	unitFrame:SetFrameStrata(UnitDB.Frame.FrameStrata)
 end
 
