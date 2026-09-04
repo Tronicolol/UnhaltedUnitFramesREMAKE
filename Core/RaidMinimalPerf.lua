@@ -2,6 +2,7 @@ local _, UUF = ...
 
 local OriginalCreateUnitFrame = UUF.CreateUnitFrame
 local OriginalUpdateUnitFrame = UUF.UpdateUnitFrame
+local OriginalUpdateGroupIndicators = UUF.UpdateGroupIndicators
 
 local function IsRaidUnit(unit)
 	return UUF:GetNormalizedUnit(unit) == "raid"
@@ -84,4 +85,19 @@ function UUF:UpdateUnitFrame(unitFrame, unit)
 	UUF:UpdateUnitHealthBar(unitFrame, unit)
 	UpdateMinimalRaidName(unitFrame, unit)
 	unitFrame:SetFrameStrata(UnitDB.Frame.FrameStrata)
+end
+
+function UUF:UpdateGroupIndicators(groupType, onlyUpdateRoles)
+	if groupType ~= "raid" then
+		return OriginalUpdateGroupIndicators(self, groupType, onlyUpdateRoles)
+	end
+
+	-- The normal group lifecycle re-registers Range/TargetGlow/Role after
+	-- combat or role changes. The minimal benchmark must keep those paths off.
+	UUF:ForEachRaidFrame(function(raidFrame)
+		UUF:UnregisterRangeFrame(raidFrame)
+		UUF:UnregisterTargetGlowIndicatorFrame(raidFrame)
+		if raidFrame.DispelHighlightUnit then UUF:UnregisterDispelHighlightEvents(raidFrame) end
+		raidFrame.UUFGroupUnit = raidFrame.unit
+	end, true, UUF.RAID_TEST_MODE)
 end
