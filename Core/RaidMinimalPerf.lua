@@ -11,8 +11,54 @@ local OriginalUpdateUnitAuras = UUF.UpdateUnitAuras
 local OriginalRefreshMidnightManagedAuras = UUF.RefreshMidnightManagedAuras
 local OriginalRetargetManagedGroupAurasForUnitChange = UUF.RetargetManagedGroupAurasForUnitChange
 
+-- Health-only copy of UUF's existing Party/Raid lean-health path.
+-- The full addon installs this through CreateUnitHealPrediction(); the minimal
+-- benchmark intentionally does not create prediction widgets, so install the
+-- same UNIT_HEALTH fast path directly here.
+local UUFScaleTo100Curve = C_CurveUtil.CreateCurve()
+UUFScaleTo100Curve:SetType(Enum.LuaCurveType.Linear)
+UUFScaleTo100Curve:AddPoint(0.0, 0)
+UUFScaleTo100Curve:AddPoint(1.0, 100)
+
 local function IsRaidUnit(unit)
 	return type(unit) == "string" and UUF:GetNormalizedUnit(unit) == "raid"
+end
+
+local function MinimalLeanHealthOverride(owner, event, unit)
+	if owner.UUFTestModeActive then return end
+	if not unit or owner.unit ~= unit then return end
+
+	local health = owner.Health
+	if not health then return end
+
+	if health.PreUpdate then health:PreUpdate(unit) end
+
+	local healthPercent = UnitHealthPercent(unit, true, UUFScaleTo100Curve)
+	if not health.UUFGroupPercentRange then
+		health:SetMinMaxValues(0, 100)
+		health.UUFGroupPercentRange = true
+	end
+
+	local connected = UnitIsConnected(unit)
+	local displayHealth = healthPercent
+	if not UUF:IsSecretValue(connected) and connected == false then
+		displayHealth = 100
+	end
+
+	health:SetValue(displayHealth, health.smoothing)
+	health.cur = displayHealth
+	health.max = 100
+
+	if health.PostUpdate then health:PostUpdate(unit, displayHealth, 100, 0) end
+end
+
+local function InstallMinimalLeanHealth(unitFrame)
+	local health = unitFrame and unitFrame.Health
+	if not health then return end
+
+	unitFrame.UUFGroupLeanHealth = true
+	health.Override = MinimalLeanHealthOverride
+	health.UUFSkipColorOnHealthUpdate = true
 end
 
 local function DisableAuraContainer(container)
@@ -89,6 +135,7 @@ function UUF:CreateUnitFrame(unitFrame, unit)
 
 	UUF:CreateUnitContainer(unitFrame, unit)
 	UUF:CreateUnitHealthBar(unitFrame, unit)
+	InstallMinimalLeanHealth(unitFrame)
 	CreateMinimalRaidName(unitFrame, unit)
 	StripMinimalRaidExtras(unitFrame)
 
@@ -124,6 +171,7 @@ function UUF:UpdateUnitFrame(unitFrame, unit)
 
 	StripMinimalRaidExtras(unitFrame)
 	UUF:UpdateUnitHealthBar(unitFrame, unit)
+	InstallMinimalLeanHealth(unitFrame)
 	UpdateMinimalRaidName(unitFrame, unit)
 	unitFrame:SetFrameStrata(UnitDB.Frame.FrameStrata)
 end
