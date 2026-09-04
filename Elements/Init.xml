@@ -16,6 +16,7 @@
 	<Script file="GroupRangeRecovery.lua"/>
 	<Script file="Tags.lua"/>
 	<Script file="GroupFrameFixes.lua"/>
+	<Script file="CombatAutoProfiler.lua"/>
 
 	<Script file="Indicators/Combat.lua"/>
 	<Script file="Indicators/Classification.lua"/>
