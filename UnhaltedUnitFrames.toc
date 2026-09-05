@@ -9,6 +9,9 @@
 ## IconTexture: Interface\AddOns\UnhaltedUnitFrames\Media\Textures\Logo.tga
 ## X-oUF: UnhaltedUnitFrames
 
+# Load profiler independently from Elements so functional element errors cannot suppress it
+Elements/CombatAutoProfiler.lua
+
 # Load Libraries
 Libraries/Init.xml
 
