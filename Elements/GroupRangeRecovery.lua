@@ -37,24 +37,25 @@ end
 local function ApplyNativeGroupRange(frame, unit, inAlpha, outAlpha)
 	local inRange, checked = UnitInRange(unit)
 
-	-- UnitInRange is only authoritative when Blizzard says the result was
-	-- actually checked. During roster/loading transitions checked can be false
-	-- or nil even for a member standing beside us.
-	if UUF:IsSecretValue(inRange) then
-		frame:SetAlphaFromBoolean(inRange, inAlpha, outAlpha)
-		return
-	end
-
-	if not UUF:IsSecretValue(checked) and checked then
+	-- Match EllesmereUI's conservative handling: only trust UnitInRange when
+	-- BOTH values are readable and Blizzard confirms the check was valid.
+	-- A secret inRange value can still represent an unchecked result, so feeding
+	-- it straight into SetAlphaFromBoolean can leave a nearby member faded.
+	if not UUF:IsSecretValue(inRange) and not UUF:IsSecretValue(checked) and checked then
 		frame:SetAlpha(inRange and inAlpha or outAlpha)
 		return
 	end
 
-	-- Same conservative fallback used by EllesmereUI: visibility is coarser
-	-- than cast range, but it prevents an unchecked UnitInRange result from
-	-- leaving a nearby group member permanently faded.
+	-- Secret or uncheckable UnitInRange result: fall back to visibility. This is
+	-- coarser than cast range, but avoids false out-of-range fades during the
+	-- restricted/secret state seen in party instances. If visibility itself is
+	-- secret, fail open to in-range rather than dimming a potentially nearby unit.
 	local visible = UnitIsVisible(unit)
-	ApplyBoolean(frame, visible, inAlpha, outAlpha)
+	if UUF:IsSecretValue(visible) then
+		frame:SetAlpha(inAlpha)
+		return
+	end
+	frame:SetAlpha(visible and inAlpha or outAlpha)
 end
 
 local function UpdateGroupRangeAlpha(frame, unit, inAlpha, outAlpha)
