@@ -8,6 +8,7 @@
     <Script file="GroupFrames.lua"/>
     <Script file="GroupCentering.lua"/>
     <Script file="RaidMinimalPerf.lua"/>
+    <Script file="RaidPredictionPerf.lua"/>
 
     <Script file="Config/GUIWidgets.lua"/>
     <Script file="Config/GUI.lua"/>
