@@ -4,8 +4,15 @@ local ayijeReanchorHooked = false
 local protectedReanchorPending = false
 
 local function GetAyije()
-	if not C_AddOns.IsAddOnLoaded("Ayije_CDM") then return nil end
-	return _G["Ayije_CDM"]
+	if C_AddOns.IsAddOnLoaded("KCDM") and _G["KCDM"] then
+		return _G["KCDM"]
+	end
+
+	if C_AddOns.IsAddOnLoaded("Ayije_CDM") and _G["Ayije_CDM"] then
+		return _G["Ayije_CDM"]
+	end
+
+	return nil
 end
 
 local function GetAyijeEssentialAnchor()
