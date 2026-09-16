@@ -2,7 +2,6 @@
 	<Script file="Core.lua"/>
     <Script file="Defaults.lua"/>
     <Script file="Globals.lua"/>
-    <Script file="GameMenu.lua"/>
     <Script file="TestEnvironment.lua"/>
     <Script file="UnitFrame.lua"/>
     <Script file="GroupFrames.lua"/>
