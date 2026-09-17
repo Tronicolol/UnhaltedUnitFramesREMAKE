@@ -1,6 +1,7 @@
 local _, UUF = ...
 
 local ayijeReanchorHooked = false
+local protectedReanchorPending = false
 
 local function GetAyije()
 	if C_AddOns.IsAddOnLoaded("KCDM") and _G["KCDM"] then
@@ -137,11 +138,22 @@ local function ReapplyCDMPosition(unit)
 	local parentFrame = _G["UUF_CDMAnchor"]
 	if not parentFrame then return end
 
+	if InCombatLockdown() then
+		protectedReanchorPending = true
+		return
+	end
+
 	unitFrame:ClearAllPoints()
 	UUF:PositionPrimaryUnitFrame(unitFrame, parentFrame, UnitDB.Frame)
 end
 
 local function ReapplyPrimaryFrames()
+	if InCombatLockdown() then
+		protectedReanchorPending = true
+		return
+	end
+
+	protectedReanchorPending = false
 	ReapplyCDMPosition("player")
 	ReapplyCDMPosition("target")
 end
@@ -170,6 +182,13 @@ local function HookAyijeReanchor()
 		end)
 	end)
 end
+
+local PositionRecoveryFrame = CreateFrame("Frame")
+PositionRecoveryFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+PositionRecoveryFrame:SetScript("OnEvent", function()
+	if not protectedReanchorPending then return end
+	C_Timer.After(0, ReapplyPrimaryFrames)
+end)
 
 hooksecurefunc(UUF, "UpdateUnitHealthBar", function(_, _, unit)
 	ReapplyCDMPosition(unit)
