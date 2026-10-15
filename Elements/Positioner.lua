@@ -163,8 +163,18 @@ local function RefreshAyijeAnchorTarget()
 	local AyijeAnchor = GetAyijeEssentialAnchor()
 	if not CDMAnchor or not AyijeAnchor then return end
 
+	if InCombatLockdown() then
+		protectedReanchorPending = true
+		return
+	end
+
 	CDMAnchor:ClearAllPoints()
 	CDMAnchor:SetAllPoints(AyijeAnchor)
+end
+
+local function RefreshAnchorAndPrimaryFrames()
+	RefreshAyijeAnchorTarget()
+	ReapplyPrimaryFrames()
 end
 
 local function HookAyijeReanchor()
@@ -176,10 +186,7 @@ local function HookAyijeReanchor()
 	ayijeReanchorHooked = true
 	hooksecurefunc(CDM, "ForceReanchor", function(_, viewer)
 		if not viewer or not viewer.GetName or viewer:GetName() ~= "EssentialCooldownViewer" then return end
-		C_Timer.After(0, function()
-			RefreshAyijeAnchorTarget()
-			ReapplyPrimaryFrames()
-		end)
+		C_Timer.After(0, RefreshAnchorAndPrimaryFrames)
 	end)
 end
 
@@ -187,7 +194,7 @@ local PositionRecoveryFrame = CreateFrame("Frame")
 PositionRecoveryFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 PositionRecoveryFrame:SetScript("OnEvent", function()
 	if not protectedReanchorPending then return end
-	C_Timer.After(0, ReapplyPrimaryFrames)
+	C_Timer.After(0, RefreshAnchorAndPrimaryFrames)
 end)
 
 hooksecurefunc(UUF, "UpdateUnitHealthBar", function(_, _, unit)
