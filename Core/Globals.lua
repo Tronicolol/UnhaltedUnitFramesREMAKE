@@ -38,8 +38,6 @@ UUF.LSM:Register("statusbar", "Skyline", "Interface\\AddOns\\UnhaltedUnitFrames\
 UUF.LSM:Register("statusbar", "Stripes", "Interface\\AddOns\\UnhaltedUnitFrames\\Media\\Textures\\Stripes.png")
 UUF.LSM:Register("statusbar", "Thin Stripes", "Interface\\AddOns\\UnhaltedUnitFrames\\Media\\Textures\\ThinStripes.png")
 
-UUF.LSM:Register("background", "Dragonflight", "Interface\\AddOns\\UnhaltedUnitFrames\\Media\\Textures\\Backgrounds\\Dragonflight_BG.tga")
-
 UUF.LSM:Register("font", "Expressway", "Interface\\AddOns\\UnhaltedUnitFrames\\Media\\Fonts\\Expressway.ttf")
 UUF.LSM:Register("font", "Avante", "Interface\\AddOns\\UnhaltedUnitFrames\\Media\\Fonts\\Avante.ttf")
 UUF.LSM:Register("font", "Avantgarde (Book)", "Interface\\AddOns\\UnhaltedUnitFrames\\Media\\Fonts\\AvantGarde\\Book.ttf")
@@ -511,12 +509,12 @@ end
 
 function UUF:RequiresAlternativePowerBar()
     local SpecsNeedingAltPower = {
-        PRIEST = { 258 },           -- Shadow
-        MAGE   = { 62, 63, 64 },        -- Fire, Frost
-        PALADIN = { 70 },           -- Ret
-        SHAMAN  = { 262, 263 },     -- Ele, Enh
-        EVOKER  = { 1467, 1473 },   -- Dev, Aug
-        DRUID = { 102, 103, 104 },    -- Balance, Feral, Guardian
+        PRIEST = { 258 },
+        MAGE   = { 62, 63, 64 },
+        PALADIN = { 70 },
+        SHAMAN  = { 262, 263 },
+        EVOKER  = { 1467, 1473 },
+        DRUID = { 102, 103, 104 },
     }
     local class = select(2, UnitClass("player"))
     local specIndex = GetSpecialization()
@@ -593,7 +591,6 @@ function UUF:CreatePrompt(title, text, onAccept, onCancel, acceptText, cancelTex
     local promptDialog = StaticPopup_Show("UUF_PROMPT_DIALOG", title, text)
     if promptDialog then
         promptDialog.data = { onAccept = onAccept, onCancel = onCancel }
-        promptDialog:SetFrameStrata("TOOLTIP")
     end
     return promptDialog
 end
@@ -606,7 +603,6 @@ function UUFG:UpdateAllTags()
     end
 end
 
--- Thanks Details / Plater for this.
 function UUF:CleanTruncateUTF8String(text)
     local DetailsFramework = _G.DF
     if DetailsFramework and DetailsFramework.CleanTruncateUTF8String then
@@ -732,7 +728,6 @@ function UUF:UpdateHealthBarLayout(unitFrame, unit)
     unitFrame.Health:SetPoint("TOPLEFT", unitFrame.Container, "TOPLEFT", 1, topOffset)
     unitFrame.Health:SetPoint("BOTTOMRIGHT", unitFrame.Container, "BOTTOMRIGHT", -1, bottomOffset)
 end
-
 
 UUF.AURA_FILTERS = {
     Buffs = {
